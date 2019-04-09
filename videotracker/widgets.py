@@ -1,5 +1,8 @@
 """Widgets of the video-tracker"""
 
+import copy
+from collections import defaultdict
+
 from PyQt5.QtWidgets import (QWidget, QMainWindow, QAction, #QMessageBox,
                              QFileDialog, qApp, QCheckBox, QPushButton,
                              QGridLayout, QDockWidget, QVBoxLayout, QBoxLayout,
@@ -391,59 +394,74 @@ class ThresholdSegmentationWidget(QWidget):
 
     def __init__(self):
         super().__init__()
+        self.widgets = {}
         self.create_gui()
-
-    @property
-    def blur(self):
-        """The amount to blur by using a Gaussian Blur"""
-        return self.widgets['sbox_blur'].value()
-    @blur.setter
-    def blur(self, value: int):
-        # Check that value is odd,
-        if not value % 2:
-            self.widgets['sbox_blur'].setValue(value)
-        else:
-            raise ValueError('Blur can only be odd')
-
-    @property
-    def size(self):
-        """The size to use for an adaptive threshold"""
-        return self.widgets['sbox_size'].value()
-    @size.setter
-    def size(self, value: int):
-        # Check value is odd
-        if not value % 2:
-            self.widgets['sbox_blur'].setValue(value)
-        else:
-            raise ValueError('Size can only be odd')
+        self.create_methods()
 
     @property
     def c(self):
         # c is snek_case.
         # pylint: disable=invalid-name
         """Value subtracted from all bins"""
-        return self.widgets['sbox_c'].value()
+        return self.widgets['C Value'].value()
     @c.setter
     def c(self, value):
         # c is snek_case.
         # pylint: disable=invalid-name
-        self.widgets['sbox_c'].setValue(value)
+        self.widgets['C Value'].setValue(value)
 
     def create_gui(self):
         """Creates a GUI"""
-        self.widgets = {
-            'sbox_c': QSpinBox(),
-            'sbox_blur': QSpinBox(),
-            'sbox_size': QSpinBox(),
-        }
+        self.parameters = [
+            {'name': 'blur',
+             'label': 'Blur Size',
+             'form': QSpinBox,
+             'range': (1, 100),
+             'validity': lambda x: not x % 2},
+            {'name': 'c',
+             'label': 'C Value',
+             'form': QSpinBox},
+            {'name': 'size',
+             'label': 'Bin Size',
+             'form': QSpinBox,
+             'validity': lambda x: not x % 2},
+            {'name': 'minimum',
+             'label': 'Minimum Size',
+             'form': QSpinBox},
+            {'name': 'maximum',
+             'label': 'Maximum Size',
+             'form': QSpinBox},
+            {'label': 'Gaussian',
+             'form': QCheckBox},
+        ]
         layout = QGridLayout()
-        layout.addWidget(self.widgets['sbox_blur'], 0, 0)
-        layout.addWidget(QLabel('Blur Size'), 0, 1)
-        layout.addWidget(self.widgets['sbox_size'], 1, 0)
-        layout.addWidget(QLabel('Threshold Size'), 1, 1)
-        layout.addWidget(self.widgets['sbox_c'], 2, 0)
-        layout.addWidget(QLabel('Value Subtracted'), 2, 1)
         self.setLayout(layout)
+        for i, parameter in enumerate(self.parameters):
+            widget = parameter['form']()
+            self.widgets[parameter['name']] = widget
+            label = QLabel(parameter['label'])
+            # add bits to layout
+            layout.addWidget(widget, i, 0)
+            layout.addWidget(label, i, 1)
+            # Create class methods
+
+    #def create_methods(self):
+    #    """Creates class properties and methods based on parameters given"""
+    #    for i, parameter in enumerate(self.parameters):
+    #        name = copy.copy(parameter['name'])
+    #        if 'validity' in parameter.keys():
+    #            validity = copy.copy(parameter['validity'])
+    #        else:
+    #            validity = lambda x: True
+    #        def getter(self):
+    #            return self.widgets[name].value()
+    #        def setter(self, value):
+    #            if parameter['validity'](value):
+    #                self.widgets[name].setValue(value)
+
+    #        prop = property(fget=lambda self: self.widgets[name].value(),
+    #                        fset=setter)
+    #        setattr(self, parameter['name'], prop)
 
 class MainView(QMainWindow):
     """An abstract main view"""
