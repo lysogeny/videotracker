@@ -436,12 +436,13 @@ class MainView(QMainWindow):
 
     def compute_image(self):
         """Computes the image using the function from self.options"""
-        if self.dock.preview:
+        if self.dock.preview and self.frame:
             try:
                 contours = self.options.function(self.frame, **self.options.values)
-            except Exception as e:
+            except cv2.error as exception:
                 #QMessageBox.critical(self, 'Critical Problem', str(e))
-                self.statusbar.showMessage(str(e))
+                print(exception)
+                self.statusbar.showMessage(str(exception))
             else:
                 frame = self.frame.copy()
                 frame = cv2.drawContours(frame, contours, -1, (0, 0, 255), 3)
