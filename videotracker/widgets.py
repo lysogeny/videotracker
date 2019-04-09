@@ -14,10 +14,28 @@ class ImageView(QWidget):
     """The view area.
 
     The view area consists of a label with a pixmap in a scrollarea
+    GUI consists of a QVBox with:
+        - QScrollArea with QLabel
+        - QHBox:
+            QLabel, QSlider, QSpinBox
+
+    By setting image it is possible to display an image in the QScrollArea.
+    The scrollarea can be zoomed by setting the local property scale. The
+    position of the slider, and maximum possible position of the slider can
+    be set with the pos and pos_max properties.
     """
+    # Pylint says there is too many instance attributes.
+    # I disagree however. This is in part due to the usage of setters and
+    # getters with private attributes. There is 6 user-facing attributes in
+    # total and that is very managable.
+    # pylint: disable=too-many-instance-attributes
     @property
     def scale(self):
-        """The scale of the image"""
+        """The scale of the image
+
+        Internally stored in _scale. Setting this variable will resize the image
+        to the desired scale.
+        """
         return self._scale
     @scale.setter
     def scale(self, value):
@@ -28,7 +46,16 @@ class ImageView(QWidget):
 
     @property
     def image(self):
-        """The image displayed"""
+        """The image displayed, as a numpy array.
+
+        Setting this variable causes:
+            - An image to be converted to a QImage and then displayed in the
+              ScrollArea
+            - Spinboxes, Sliders to be enabled
+            - If this is the first image to be loaded, scale set to 1.0
+
+        The numpy array is stored in self.frame
+        """
         return self.frame
     @image.setter
     def image(self, frame):
@@ -47,11 +74,16 @@ class ImageView(QWidget):
 
     @property
     def pos_max(self):
-        """The maximum position possible"""
+        """The maximum position possible
+
+        Setting this variable will change the lower part of the label and the
+        maximum values of slider and spinbox.
+        """
         return self._pos_max
     @pos_max.setter
     def pos_max(self, value):
-        # Attribute actually gets defined in init, pylint is confused by this
+        # Attribute _pos_max actually gets defined in init, pylint is confused
+        # by @property's setter
         # pylint: disable=attribute-defined-outside-init
         self._pos_max = value
         self.slidelabel.setText(self.lab_text_template.format(self.pos, value))
@@ -60,7 +92,12 @@ class ImageView(QWidget):
 
     @property
     def pos(self):
-        """Position of the slider and video"""
+        """Position of the slider and video
+
+        Setting this will: change the slider, label and spinbox.
+        NB: As MainView connects to slider's valueChanged, setting this will
+        indirectly cause effects in MainView.
+        """
         return self.slider.value()
     @pos.setter
     def pos(self, value):
@@ -76,7 +113,18 @@ class ImageView(QWidget):
         self.frame = None
 
     def create_gui(self):
-        """Creates the image view gui"""
+        """Creates the image view gui
+
+        GUI consists of a QVBox with:
+            - QScrollArea with QLabel
+            - QHBox:
+                QLabel, QSlider, QSpinBox
+
+        The bottom QHBox is an indicator and control area for the frame to be
+        displayed. It could be any other value though. What it does depends on
+        what signals are connected.
+        Internally all Widgets in the HBox are linked.
+        """
         self.image_lab = QLabel()
         self.image_lab.setBackgroundRole(QPalette.Dark)
         self.image_lab.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
@@ -101,22 +149,33 @@ class ImageView(QWidget):
         self.setLayout(self.layout)
 
     def reset(self):
-        """Reset the widget to avoid issues"""
+        """Reset the widget.
+
+        This is used to avoid issues caused by loading a video with a different
+        maximum frame count
+        """
         self.slider.blockSignals(True)
         self.pos_max = 0
         self.pos = 0
         self.slider.blockSignals(False)
 
     def zoom_in(self):
-        """Zooms in"""
+        """Zooms in (+25%)"""
         self.scale *= 1.25
 
     def zoom_out(self):
-        """Zooms out"""
+        """Zooms out (-25%)"""
         self.scale *= 0.8
 
     def zoom_optimal(self):
-        """Zooms to normal extent"""
+        """Zooms to optimal extent
+
+        Optimal scale is calculated by:
+
+            should/current * self.scale
+
+        for both width and height, the minimum of which is taken as the new scale.
+        """
         current_width = self.image_lab.width()
         should_width = self.scrollarea.width()
         current_height = self.image_lab.height()
@@ -125,12 +184,29 @@ class ImageView(QWidget):
                          should_height/current_height * self.scale)
 
 class SideDock(QDockWidget):
-    """Sidebar dock area"""
+    """Sidebar dock area
+
+    Consists of an upper custom widget (defined by custom in construction) and a
+    lower constant widget. The lower widget adjust various output file
+    properties, and offers controls for starting/stopping.
+    """
+    # Again, pylint disagrees on instance attributes.
+    # To my count there is seven-ish properly public attributes.
+    # A further seven attributes define various UI elements which need to be
+    # accessed frequently by property setters and getters.
+    # As such I don't think there is much room for improvement
+    # Arguably, custom could be it's own module, with the layouting done here
+    # done in the main window.
+    # Perhaps I will change to that, but right now that appears to be a minor
+    # issue.
+    # pylint: disable=too-many-instance-attributes
+
     @property
     def csv_file(self):
         """Output location of the csv file.
 
-        None if self.csv False, otherwise str
+        None if self.csv False, otherwise str.
+        Setting this changes the status tip of the csv_button
         """
         if self.csv:
             return self.files['csv']
@@ -144,7 +220,8 @@ class SideDock(QDockWidget):
     def vid_file(self):
         """Output location of the video file.
 
-        None if self.vid False, otherwise str
+        None if self.vid False, otherwise str.
+        Setting this changes the status tip of the vid_button
         """
         if self.vid:
             return self.files['vid']
@@ -156,36 +233,66 @@ class SideDock(QDockWidget):
 
     @property
     def csv(self):
-        """Boolean indicating csv output"""
+        """Boolean indicating csv output
+
+        Setting this set the checkbox to the appropriate value and
+        enables/disables the csv_button.
+        The checkbox will not emit signals for that change.
+        """
         return bool(self.csv_cbox.checkState())
     @csv.setter
     def csv(self, value: bool):
-        self.csv_cbox.setCheckState(value)
+        self.csv_cbox.blockSignals(True)
+        if value:
+            self.csv_cbox.setCheckState(2)
+        else:
+            self.csv_cbox.setCheckState(0)
+        self.csv_cbox.blockSignals(False)
         self.csv_button.setEnabled(self.csv)
 
     @property
     def vid(self):
-        """Boolean indicating vid output"""
+        """Boolean indicating vid output
+
+        Setting this set the checkbox to the appropriate value and
+        enables/disables the vid_button.
+        The checkbox will not emit signals for that change.
+        """
         return bool(self.vid_cbox.checkState())
     @vid.setter
     def vid(self, value: bool):
-        self.vid_cbox.setCheckState(value)
+        self.vid_cbox.blockSignals(True)
+        if value:
+            self.vid_cbox.setCheckState(2)
+        else:
+            self.vid_cbox.setCheckState(0)
+        self.vid_cbox.blockSignals(False)
         self.vid_button.setEnabled(self.vid)
 
     @property
     def preview(self):
-        """Boolean indicating the preview preference"""
+        """Boolean indicating the preview preference
+
+        Setting this set the checkbox to the appropriate value.
+        The checkbox will not emit signals for that change.
+        """
         return bool(self.preview_cbox.checkState())
     @preview.setter
     def preview(self, value: bool):
+        self.preview_cbox.blockSignals(True)
         if value:
             self.preview_cbox.setCheckState(2)
         else:
             self.preview_cbox.setCheckState(0)
+        self.preview_cbox.blockSignals(False)
 
     @property
     def running(self):
-        """Boolean indicating the state of the system."""
+        """Boolean indicating the state of the system.
+
+        Setting this to True will cause a progress bar to become visible and the
+        button label to change to 'Pause'. Go will be set if the value is set to False.
+        """
         return self._running
     @running.setter
     def running(self, value: bool):
@@ -208,21 +315,36 @@ class SideDock(QDockWidget):
         self.running = False
 
     def pick_csv(self):
-        """Picks csv output location"""
+        """Picks csv output location
+
+        Spawns a QFileDialog to get a save file name. Defaults to currently set csv_file.
+        If successful will change self.csv_file
+        """
         file_name = QFileDialog.getSaveFileName(self, 'CSV File Save Location',
                                                 self.csv_file, '*.csv')
         if file_name[0]:
             self.csv_file = file_name[0]
 
     def pick_vid(self):
-        """Picks video output location"""
+        """Picks video output location
+
+        Spawns a QFileDialog to get a save file name. Defaults to currently set vid_file.
+        If successful will change self.vid_file
+        """
         file_name = QFileDialog.getSaveFileName(self, 'Video save location',
                                                 self.vid_file, '*.mp4')
         if file_name[0]:
             self.vid_file = file_name[0]
 
     def create_gui(self):
-        """Creates the dock gui"""
+        """Creates the dock gui
+
+        The dock gui consists of a vbox with a grid in the lower end, and a
+        custom widget in the upper end. They are separated by a stretch.
+
+        The grid has checkboxes for enabling/disabling csv and vid, as well as
+        setting vid_file and csv_file.
+        """
         # Elements
         self.csv_cbox = QCheckBox('Output CSV', stateChanged=lambda x: setattr(self, 'csv', x),
                                   statusTip='Enable CSV output')
@@ -241,7 +363,7 @@ class SideDock(QDockWidget):
         self.progress = QProgressBar()
         self.progress.setHidden(True)
         self.go_button = QPushButton('Go', maximumWidth=50,
-                                     clicked=lambda x:setattr(self, 'running', not self.running),
+                                     clicked=lambda x: setattr(self, 'running', not self.running),
                                      enabled=False)
         # Grid layout
         inner_grid = QGridLayout()
@@ -255,6 +377,7 @@ class SideDock(QDockWidget):
         # wrapped in a vbox
         layout = QVBoxLayout()
         self.custom_box = QBoxLayout(1)
+        self.custom_box.addWidget(self.custom)
         layout.addLayout(self.custom_box)
         layout.addStretch(1)
         layout.addLayout(inner_grid)
@@ -266,19 +389,76 @@ class SideDock(QDockWidget):
 class ThresholdSegmentationWidget(QWidget):
     """A threshold segmentation widget"""
 
+    def __init__(self):
+        super().__init__()
+        self.create_gui()
+
+    @property
+    def blur(self):
+        """The amount to blur by using a Gaussian Blur"""
+        return self.widgets['sbox_blur'].value()
+    @blur.setter
+    def blur(self, value: int):
+        # Check that value is odd,
+        if not value % 2:
+            self.widgets['sbox_blur'].setValue(value)
+        else:
+            raise ValueError('Blur can only be odd')
+
+    @property
+    def size(self):
+        """The size to use for an adaptive threshold"""
+        return self.widgets['sbox_size'].value()
+    @size.setter
+    def size(self, value: int):
+        # Check value is odd
+        if not value % 2:
+            self.widgets['sbox_blur'].setValue(value)
+        else:
+            raise ValueError('Size can only be odd')
+
+    @property
+    def c(self):
+        # c is snek_case.
+        # pylint: disable=invalid-name
+        """Value subtracted from all bins"""
+        return self.widgets['sbox_c'].value()
+    @c.setter
+    def c(self, value):
+        # c is snek_case.
+        # pylint: disable=invalid-name
+        self.widgets['sbox_c'].setValue(value)
+
+    def create_gui(self):
+        """Creates a GUI"""
+        self.widgets = {
+            'sbox_c': QSpinBox(),
+            'sbox_blur': QSpinBox(),
+            'sbox_size': QSpinBox(),
+        }
+        layout = QGridLayout()
+        layout.addWidget(self.widgets['sbox_blur'], 0, 0)
+        layout.addWidget(QLabel('Blur Size'), 0, 1)
+        layout.addWidget(self.widgets['sbox_size'], 1, 0)
+        layout.addWidget(QLabel('Threshold Size'), 1, 1)
+        layout.addWidget(self.widgets['sbox_c'], 2, 0)
+        layout.addWidget(QLabel('Value Subtracted'), 2, 1)
+        self.setLayout(layout)
+
 class MainView(QMainWindow):
     """An abstract main view"""
+    # Is 8/7 instance attributes really too many? Considering that this is a
+    # main window, that is impressively low.
+    # pylint: disable=too-many-instance-attributes
 
     TITLE = 'pyqt-stuff'
     actions = {}
-    menus_in_bar = ['&File', '&View']
 
     def __init__(self, csv=None, vid=None, in_vid=None):
         super().__init__()
         self.create_gui()
         self.create_actions()
         self.setWindowTitle(self.TITLE)
-        self.frame = None
         self.capture = None
         # Actions based on arguments
         self.video_file = in_vid
@@ -294,7 +474,8 @@ class MainView(QMainWindow):
         self.statusbar = self.statusBar()
         self.statusbar.showMessage('Ready')
         # Dock
-        self.dock = SideDock(QPushButton())
+        self.options = ThresholdSegmentationWidget()
+        self.dock = SideDock(self.options)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.dock)
         # Image
         self.image = ImageView()
@@ -373,15 +554,16 @@ class MainView(QMainWindow):
             this_menu = self.menubar.addMenu(menu)
             for action in self.actions[menu]:
                 this_menu.addAction(action)
-                # Only add actions where I added an icon
-                if menu in self.menus_in_bar and not action.icon().isNull():
+                # Only add actions where I added an icon and which aren't in
+                # the help menu.
+                if menu not in ('&Help') and not action.icon().isNull():
                     self.toolbar.addAction(action)
 
     def grab_frame(self, number: int):
         """Grabs frame number from the video device"""
         self.capture.set(cv2.CAP_PROP_POS_FRAMES, number)
-        _, self.frame = self.capture.read()
-        self.image.image = self.frame
+        _, frame = self.capture.read()
+        self.image.image = frame
 
     def video_load(self):
         """Loads a video file"""
@@ -390,12 +572,11 @@ class MainView(QMainWindow):
             # Open the video, get first frame
             self.video_file = file_name[0]
             self.capture = cv2.VideoCapture(self.video_file)
-            _, self.frame = self.capture.read()
+            _, frame = self.capture.read()
             # Set image of imageviewer, new maximum position
             self.image.reset()
-            self.image.image = self.frame
+            self.image.image = frame
             self.image.pos_max = int(self.capture.get(cv2.CAP_PROP_FRAME_COUNT))-1
-            print('got')
             # Enable all view actions
             for action in self.actions['&View']:
                 action.setEnabled(True)

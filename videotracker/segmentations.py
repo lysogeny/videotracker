@@ -1,15 +1,6 @@
 """Various segmentation methods"""
 import cv2
 
-def segmentation(args):
-    class Segment(Segmentation):
-        def __init__(self, fun):
-            self.fun = fun
-        def __call__(self, *args, **kwargs):
-            fun(*args, **kwargs)
-    Segment(
-
-@segment
 def adaptive_gaussian_threshold(img, size=11, value=3):
     """Adaptive threshold
     Params
@@ -33,6 +24,15 @@ class Segmentation:
         img = frame.copy()
         for function in self.function_stack:
             img = function(img)
+
+def segmentation(args):
+    class Segment(Segmentation):
+        """A Segmentation"""
+        def __init__(self, fun):
+            self.fun = fun
+        def __call__(self, *args, **kwargs):
+            self.fun(*args, **kwargs)
+
 
 class ThresholdSegmentation:
     """Threshold Segmentation"""
