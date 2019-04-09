@@ -18,5 +18,6 @@ setup(
     author_email='code@jooa.xyz',
     url='https://github.com/lysogeny/videotracker',
     #license=license,
-    packages=find_packages(exclude=('tests', 'docs'))
+    packages=find_packages(exclude=('tests', 'docs')),
+    scripts=['bin/videotracker'],
 )
