@@ -8,13 +8,14 @@ This is the executable of the videotracker package
 import sys
 import traceback
 
-from PyQt5.QtWidgets import QApplication, QMessageBox, qApp
+from PyQt5.QtWidgets import QApplication, QMessageBox
 
 from videotracker import widgets
 from videotracker import cli
 from videotracker import running
 
 def pop_exception(*args, **kwargs):
+    """Exception will pop up on screen and printed to stdout"""
     exception = traceback.format_exception(*args, **kwargs)
     errorbox = QMessageBox()
     errorbox.setText("An unexpected error occured:\n{0}".format(''.join(exception)))
