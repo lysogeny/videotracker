@@ -10,11 +10,13 @@ Feature list
 ------------
 
 - [ ] Segmentation Modules
-    - [ ] Adaptive threshold segmentation
+    - [x] Adaptive threshold segmentation
     - [ ] threshold segmentation
     - [ ] MOG2 background subtractor segmentation
     - [ ] Optical flow tracking
     - [ ] Other methods?
+- [x] Display polygons
+- [ ] Display other frames
 - [ ] CSV output
 - [ ] Video output
 - [ ] Running tracking
@@ -38,6 +40,7 @@ Minor features
 
 - [ ] Play button timer
 - [ ] KeyboardInterrupt 
+- [ ] Colour choices for output polygon tracking thing
 
 
 Requirements
