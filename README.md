@@ -20,8 +20,12 @@ Feature list
 - [ ] Running tracking
 - [ ] Connecting tracked objects to form paths
 - [ ] Diagnostics plots
-- [ ] Packaging for windows
-- [ ] Packaging for mac OS
+- [ ] Packaging
+    - [ ] Windows
+    - [ ] Mac OS
+    - [ ] Debian
+    - [x] Archlinux
+- [x] Command line argument parsing
 - [x] Video view
 - [x] Opening videos
 - [x] Panning through videos
@@ -29,12 +33,19 @@ Feature list
 - [x] Some kind of a GUI
 
 
+Minor features
+--------------
+
+- [ ] Play button timer
+- [ ] KeyboardInterrupt 
+
+
 Requirements
 ------------
 
 - python3
 - PyQt5
-- OpenCV (currently 4, 3, maybe 2 will work. I am working with opencv4)
+- OpenCV>=3
 
 
 License
