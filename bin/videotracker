@@ -14,10 +14,10 @@ from videotracker import cli
 
 def main():
     """Spawns an application"""
-    parser = cli.parser()
+    parser = cli.parser
     args = parser.parse_args()
     app = QApplication(sys.argv)
-    widget = widgets.MainView(csv=args.csv, vid=args.vid, in_vid=args.open)
+    widget = widgets.MainView(csv=args.csv, vid=args.output, in_vid=args.input)
     widget.show()
     sys.exit(app.exec_())
 
