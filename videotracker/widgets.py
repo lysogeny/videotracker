@@ -7,11 +7,13 @@ from PyQt5.QtWidgets import (QWidget, QMainWindow, QAction, #QMessageBox,
                              QFileDialog, qApp, QCheckBox, QPushButton,
                              QGridLayout, QDockWidget, QVBoxLayout, QBoxLayout,
                              QProgressBar, QLabel, QSizePolicy, QScrollArea,
-                             QSlider, QHBoxLayout, QSpinBox)
+                             QSlider, QHBoxLayout, QSpinBox, QMessageBox)
 from PyQt5.QtGui import QIcon, QPalette, QImage, QPixmap
 from PyQt5.QtCore import Qt
 
 import cv2
+
+from . import segmentations
 
 class ImageView(QWidget):
     """The view area.
@@ -361,7 +363,7 @@ class SideDock(QDockWidget):
                                       clicked=self.pick_vid,
                                       maximumWidth=50,
                                       statusTip='Output video')
-        self.preview_cbox = QCheckBox('Preview', statusTip='Should video during computation',
+        self.preview_cbox = QCheckBox('Preview', statusTip='Show video during computation',
                                       stateChanged=lambda x: setattr(self, 'checked', bool(x)))
         self.progress = QProgressBar()
         self.progress.setHidden(True)
@@ -389,80 +391,6 @@ class SideDock(QDockWidget):
         widget.setLayout(layout)
         self.setWidget(widget)
 
-class ThresholdSegmentationWidget(QWidget):
-    """A threshold segmentation widget"""
-
-    def __init__(self):
-        super().__init__()
-        self.widgets = {}
-        self.create_gui()
-        self.create_methods()
-
-    @property
-    def c(self):
-        # c is snek_case.
-        # pylint: disable=invalid-name
-        """Value subtracted from all bins"""
-        return self.widgets['C Value'].value()
-    @c.setter
-    def c(self, value):
-        # c is snek_case.
-        # pylint: disable=invalid-name
-        self.widgets['C Value'].setValue(value)
-
-    def create_gui(self):
-        """Creates a GUI"""
-        self.parameters = [
-            {'name': 'blur',
-             'label': 'Blur Size',
-             'form': QSpinBox,
-             'range': (1, 100),
-             'validity': lambda x: not x % 2},
-            {'name': 'c',
-             'label': 'C Value',
-             'form': QSpinBox},
-            {'name': 'size',
-             'label': 'Bin Size',
-             'form': QSpinBox,
-             'validity': lambda x: not x % 2},
-            {'name': 'minimum',
-             'label': 'Minimum Size',
-             'form': QSpinBox},
-            {'name': 'maximum',
-             'label': 'Maximum Size',
-             'form': QSpinBox},
-            {'label': 'Gaussian',
-             'form': QCheckBox},
-        ]
-        layout = QGridLayout()
-        self.setLayout(layout)
-        for i, parameter in enumerate(self.parameters):
-            widget = parameter['form']()
-            self.widgets[parameter['name']] = widget
-            label = QLabel(parameter['label'])
-            # add bits to layout
-            layout.addWidget(widget, i, 0)
-            layout.addWidget(label, i, 1)
-            # Create class methods
-
-    #def create_methods(self):
-    #    """Creates class properties and methods based on parameters given"""
-    #    for i, parameter in enumerate(self.parameters):
-    #        name = copy.copy(parameter['name'])
-    #        if 'validity' in parameter.keys():
-    #            validity = copy.copy(parameter['validity'])
-    #        else:
-    #            validity = lambda x: True
-    #        def getter(self):
-    #            return self.widgets[name].value()
-    #        def setter(self, value):
-    #            if parameter['validity'](value):
-    #                self.widgets[name].setValue(value)
-
-    #        prop = property(fget=lambda self: self.widgets[name].value(),
-    #                        fset=setter)
-    #        setattr(self, parameter['name'], prop)
-
 class MainView(QMainWindow):
     """An abstract main view"""
     # Is 8/7 instance attributes really too many? Considering that this is a
@@ -478,6 +406,7 @@ class MainView(QMainWindow):
         self.create_actions()
         self.setWindowTitle(self.TITLE)
         self.capture = None
+        self.frame = None
         # Actions based on arguments
         self.video_file = in_vid
         self.dock.csv_file = csv
@@ -492,7 +421,9 @@ class MainView(QMainWindow):
         self.statusbar = self.statusBar()
         self.statusbar.showMessage('Ready')
         # Dock
-        self.options = ThresholdSegmentationWidget()
+        self.options = segmentations.ThresholdSegmentation()
+        for widget in self.options.widgets:
+            self.options.widgets[widget].valueChanged.connect(self.compute_image)
         self.dock = SideDock(self.options)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.dock)
         # Image
@@ -500,6 +431,20 @@ class MainView(QMainWindow):
         self.image.slider.valueChanged.connect(self.grab_frame)
         self.setCentralWidget(self.image)
         self.resize(800, 500)
+
+    def compute_image(self):
+        """Computes the image using the function from self.options"""
+        if self.dock.preview:
+            try:
+                contours = self.options.function(self.frame, **self.options.values)
+            except Exception as e:
+                #QMessageBox.critical(self, 'Critical Problem', str(e))
+                self.statusbar.showMessage(str(e))
+            else:
+                frame = self.frame.copy()
+                frame = cv2.drawContours(frame, contours, -1, (0, 0, 255), 3)
+                self.image.image = frame
+
 
     def create_actions(self):
         """Creates all actions"""
@@ -581,7 +526,9 @@ class MainView(QMainWindow):
         """Grabs frame number from the video device"""
         self.capture.set(cv2.CAP_PROP_POS_FRAMES, number)
         _, frame = self.capture.read()
+        self.frame = frame
         self.image.image = frame
+        self.compute_image()
 
     def video_load(self):
         """Loads a video file"""
@@ -594,6 +541,7 @@ class MainView(QMainWindow):
             # Set image of imageviewer, new maximum position
             self.image.reset()
             self.image.image = frame
+            self.frame = frame
             self.image.pos_max = int(self.capture.get(cv2.CAP_PROP_FRAME_COUNT))-1
             # Enable all view actions
             for action in self.actions['&View']:
