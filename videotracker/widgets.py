@@ -263,8 +263,7 @@ class SideDock(QDockWidget):
         widget.setLayout(layout)
         self.setWidget(widget)
 
-
-class ThresholdSegmentWidget(QWidget):
+class ThresholdSegmentationWidget(QWidget):
     """A threshold segmentation widget"""
 
 class MainView(QMainWindow):
@@ -274,14 +273,18 @@ class MainView(QMainWindow):
     actions = {}
     menus_in_bar = ['&File', '&View']
 
-    def __init__(self):
+    def __init__(self, csv=None, vid=None, in_vid=None):
         super().__init__()
         self.create_gui()
         self.create_actions()
         self.setWindowTitle(self.TITLE)
-        self.video_file = None
         self.frame = None
         self.capture = None
+        # Actions based on arguments
+        self.video_file = in_vid
+        self.dock.csv_file = csv
+        self.dock.csv = csv is not None
+        self.dock.vid = vid is not None
 
     def create_gui(self):
         """Creates the GUI"""

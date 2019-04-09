@@ -1,15 +1,23 @@
 #!/usr/bin/env python3
 
+"""Videotracker callable
+
+This is the executable of the videotracker package
+"""
+
 import sys
 
 from PyQt5.QtWidgets import QApplication
 
 from videotracker import widgets
+from videotracker import cli
 
 def main():
     """Spawns an application"""
+    parser = cli.Parser()
+    args = parser.parse_args()
     app = QApplication(sys.argv)
-    widget = widgets.MainView()
+    widget = widgets.MainView(csv=args.csv, vid=args.vid, in_vid=args.open)
     widget.show()
     sys.exit(app.exec_())
 
