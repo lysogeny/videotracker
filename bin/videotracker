@@ -6,17 +6,28 @@ This is the executable of the videotracker package
 """
 
 import sys
+import traceback
 
-from PyQt5.QtWidgets import QApplication
+from PyQt5.QtWidgets import QApplication, QMessageBox, qApp
 
 from videotracker import widgets
 from videotracker import cli
+from videotracker import running
+
+def pop_exception(*args, **kwargs):
+    exception = traceback.format_exception(*args, **kwargs)
+    errorbox = QMessageBox()
+    errorbox.setText("An unexpected error occured:\n{0}".format(''.join(exception)))
+    errorbox.exec_()
+    traceback.print_exception(*args, **kwargs)
 
 def main():
     """Spawns an application"""
     parser = cli.parser
     args = parser.parse_args()
     app = QApplication(sys.argv)
+    running.setup_interrupt_handling()
+    sys.excepthook = pop_exception
     widget = widgets.MainView(csv=args.csv, vid=args.output, in_vid=args.input)
     widget.show()
     sys.exit(app.exec_())

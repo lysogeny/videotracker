@@ -409,6 +409,8 @@ class MainView(QMainWindow):
         self.frame = None
         # Actions based on arguments
         self.video_file = in_vid
+        if self.video_file:
+            self.video_load()
         self.dock.csv_file = csv
         self.dock.csv = csv is not None
         self.dock.vid = vid is not None
@@ -455,7 +457,7 @@ class MainView(QMainWindow):
             '&File': [
                 QAction(QIcon.fromTheme('document-open'), 'Open...',
                         statusTip='Opens a new file',
-                        triggered=self.video_load)
+                        triggered=self.video_pick)
             ],
             '&View': [
                 QAction(QIcon.fromTheme('zoom-in'), 'Zoom in',
@@ -530,29 +532,32 @@ class MainView(QMainWindow):
         self.image.image = frame
         self.compute_image()
 
-    def video_load(self):
-        """Loads a video file"""
+    def video_pick(self):
+        """Spawn a video picking dialog"""
         file_name = QFileDialog.getOpenFileName(self, 'Open file', self.video_file)
         if file_name[0]:
-            # Open the video, get first frame
             self.video_file = file_name[0]
-            self.capture = cv2.VideoCapture(self.video_file)
-            _, frame = self.capture.read()
-            # Set image of imageviewer, new maximum position
-            self.image.reset()
-            self.image.image = frame
-            self.frame = frame
-            self.image.pos_max = int(self.capture.get(cv2.CAP_PROP_FRAME_COUNT))-1
-            # Enable all view actions
-            for action in self.actions['&View']:
-                action.setEnabled(True)
-            # Print message
-            self.statusbar.showMessage('Loaded file {}'.format(self.video_file))
-            # Enable dock go button
-            self.dock.go_button.setEnabled(True)
-            # Give dock some basic idea of file names
+            self.video_load()
             file_name_base = '.'.join(file_name[0].split('.')[:-1])
             if not self.dock.vid_file:
                 self.dock.vid_file = file_name_base + '_output.' + 'mp4'
             if not self.dock.csv_file:
                 self.dock.csv_file = file_name_base + '_output.' + 'csv'
+
+    def video_load(self):
+        """Loads a video file"""
+        self.capture = cv2.VideoCapture(self.video_file)
+        _, frame = self.capture.read()
+        # Set image of imageviewer, new maximum position
+        self.image.reset()
+        self.image.image = frame
+        self.frame = frame
+        self.image.pos_max = int(self.capture.get(cv2.CAP_PROP_FRAME_COUNT))-1
+        # Enable all view actions
+        for action in self.actions['&View']:
+            action.setEnabled(True)
+        # Print message
+        self.statusbar.showMessage('Loaded file {}'.format(self.video_file))
+        # Enable dock go button
+        self.dock.go_button.setEnabled(True)
+        # Give dock some basic idea of file names
