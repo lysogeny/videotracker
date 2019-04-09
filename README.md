@@ -36,3 +36,14 @@ Requirements
 - PyQt5
 - OpenCV (currently 4, 3, maybe 2 will work. I am working with opencv4)
 
+
+License
+-------
+
+This is software that I wrote working for the state of
+[Baden-Württemberg](https://en.wikipedia.org/wiki/Baden-W%C3%BCrttemberg). 
+As such, it is funded (at least to some extent) by tax money. In the interest
+of reproducibility and the idea of ["public money public code"](https://publiccode.eu/), 
+I am releasing this under the [MIT license](https://en.wikipedia.org/wiki/MIT_License) 
+(See also LICENSE).
+
