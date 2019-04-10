@@ -1,0 +1,32 @@
+pkgname=videotracker-devel
+pkgver=r22.9fb2da5
+pkgrel=1
+pkgdesc="A modular video tracker offering a Qt GUI"
+arch=('any')
+url="https://github.com/lysogeny/videotracker"
+license=()
+depends=('python' 'opencv' 'python-pyqt5')
+makedepends=('git' 'python' 'python-setuptools')
+provides=('videotracker')
+conflicts=('videotracker-git')
+_devdir="$HOME/code/videotracker/"
+
+# Horribly hacky, and you should ignore this entire file
+
+pkgver() {
+	#cd "$srcdir/${pkgname%-devel}"
+    cd $_devdir
+	printf "r%s.%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+}
+
+build() {
+	#cd "$srcdir/${pkgname%-devel}"
+    cd $_devdir
+    python setup.py build
+}
+
+package() {
+	#cd "$srcdir/${pkgname%-devel}"
+    cd $_devdir
+    python setup.py install --root="$pkgdir/" --optimize=1 --skip-build
+}

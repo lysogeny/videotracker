@@ -1,0 +1,27 @@
+pkgname=videotracker-git
+pkgver=r7.f00b461
+pkgrel=1
+pkgdesc="A modular video tracker offering a Qt GUI"
+arch=('any')
+url="https://github.com/lysogeny/videotracker"
+license=()
+depends=('python' 'opencv' 'python-pyqt5')
+makedepends=('git' 'python' 'python-setuptools')
+provides=('videotracker')
+source=('git+ssh://git@github.com/lysogeny/videotracker.git')
+sha256sums=('SKIP')
+
+pkgver() {
+	cd "$srcdir/${pkgname%-git}"
+	printf "r%s.%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+}
+
+build() {
+	cd "$srcdir/${pkgname%-git}"
+    python setup.py build
+}
+
+package() {
+	cd "$srcdir/${pkgname%-git}"
+    python setup.py install --root="$pkgdir/" --optimize=1 --skip-build
+}
