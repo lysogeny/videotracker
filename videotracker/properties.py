@@ -7,7 +7,18 @@ from PyQt5.QtWidgets import QWidget, QLabel, QHBoxLayout
 
 @dataclass
 class BaseArgument:
-    """Abstraction of segmentation method properties"""
+    """Abstraction of segmentation method properties
+
+    Attributes
+    ----------
+
+    name: Name used internally
+    label: Label on the GUI
+    default: Default value
+    form: Callable that creates a QWidget
+    validity: Callable that defines valid values
+    type: Type of the object
+    """
     name: str = ''
     label: str = ''
     default: int = 0
@@ -34,7 +45,10 @@ class Argument(BaseArgument):
             self._widget.setValue(value)
 
     def create_widget(self):
-        """Creates the widget for the property"""
+        """Creates the widget for the property.
+
+        Widget in `form` on the left, Label on right.
+        """
         layout = QHBoxLayout()
         self._widget = self.form()
         layout.addWidget(self._widget)
