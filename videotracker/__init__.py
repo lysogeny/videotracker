@@ -1,5 +1,4 @@
-#from . import widgets
-#from . import cli
-#from . import properties
-#from . import segmentations
-#from . import running
+"""Videotracker package
+
+A package that facilitates the videotracker GUI and tools.
+"""
