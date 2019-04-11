@@ -1,5 +1,5 @@
 pkgname=videotracker-devel
-pkgver=r22.9fb2da5
+pkgver=local
 pkgrel=1
 pkgdesc="A modular video tracker offering a Qt GUI"
 arch=('any')
@@ -13,11 +13,11 @@ _devdir="$HOME/code/videotracker/"
 
 # Horribly hacky, and you should ignore this entire file
 
-pkgver() {
-	#cd "$srcdir/${pkgname%-devel}"
-    cd $_devdir
-	printf "r%s.%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
-}
+#pkgver() {
+#	#cd "$srcdir/${pkgname%-devel}"
+#    cd $_devdir
+#	printf "r%s.%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+#}
 
 build() {
 	#cd "$srcdir/${pkgname%-devel}"
