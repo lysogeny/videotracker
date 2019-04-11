@@ -1,7 +1,7 @@
 """Widgets of the video-tracker"""
 
-import copy
-from collections import defaultdict
+#import copy
+#from collections import defaultdict
 
 from PyQt5.QtWidgets import (QWidget, QMainWindow, QAction, #QMessageBox,
                              QFileDialog, qApp, QCheckBox, QPushButton,
@@ -14,6 +14,7 @@ from PyQt5.QtCore import Qt
 import cv2
 
 from . import segmentations
+from .video import Video
 
 class ImageView(QWidget):
     """The view area.
@@ -436,7 +437,7 @@ class MainView(QMainWindow):
 
     def compute_image(self):
         """Computes the image using the function from self.options"""
-        if self.dock.preview and self.frame:
+        if self.dock.preview and self.frame is not None:
             try:
                 contours = self.options.function(self.frame, **self.options.values)
             except cv2.error as exception:
@@ -447,7 +448,6 @@ class MainView(QMainWindow):
                 frame = self.frame.copy()
                 frame = cv2.drawContours(frame, contours, -1, (0, 0, 255), 3)
                 self.image.image = frame
-
 
     def create_actions(self):
         """Creates all actions"""
@@ -527,8 +527,7 @@ class MainView(QMainWindow):
 
     def grab_frame(self, number: int):
         """Grabs frame number from the video device"""
-        self.capture.set(cv2.CAP_PROP_POS_FRAMES, number)
-        _, frame = self.capture.read()
+        frame = self.capture.grab(number)
         self.frame = frame
         self.image.image = frame
         self.compute_image()
@@ -547,13 +546,12 @@ class MainView(QMainWindow):
 
     def video_load(self):
         """Loads a video file"""
-        self.capture = cv2.VideoCapture(self.video_file)
-        _, frame = self.capture.read()
+        self.capture = Video(self.video_file)
         # Set image of imageviewer, new maximum position
         self.image.reset()
-        self.image.image = frame
-        self.frame = frame
-        self.image.pos_max = int(self.capture.get(cv2.CAP_PROP_FRAME_COUNT))-1
+        self.image.image = self.capture.frame
+        self.frame = self.capture.frame
+        self.image.pos_max = self.capture.frames
         # Enable all view actions
         for action in self.actions['&View']:
             action.setEnabled(True)
