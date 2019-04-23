@@ -50,9 +50,9 @@ class Argument(BaseArgument):
         Widget in `form` on the left, Label on right.
         """
         layout = QHBoxLayout()
-        self._widget = self.form()
-        layout.addWidget(self._widget)
+        self.value_widget = self.form()
+        layout.addWidget(self.value_widget)
         layout.addWidget(QLabel(self.label))
         self.widget = QWidget()
-        self.widget.valueChanged = self._widget.valueChanged
+        self.widget.valueChanged = self.value_widget.valueChanged
         self.widget.setLayout(layout)
