@@ -16,6 +16,8 @@ import cv2
 from . import segmentations
 from .video import Video
 
+import gc
+
 class ImageView(QWidget):
     """The view area.
 
@@ -426,7 +428,7 @@ class MainView(QMainWindow):
         # Dock
         self.options = segmentations.ThresholdSegmentation()
         for widget in self.options.widgets:
-            self.options.widgets[widget].valueChanged.connect(self.compute_image)
+            self.options.widgets[widget]['widget'].valueChanged.connect(self.compute_image)
         self.dock = SideDock(self.options)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.dock)
         # Image
