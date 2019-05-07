@@ -13,9 +13,6 @@ from PyQt5.QtWidgets import (QWidget, QSpinBox, QPushButton,
 from PyQt5.QtCore import QThread, pyqtSignal
 
 import cv2
-#import numpy
-
-
 
 @dataclass
 class BaseParam:
@@ -54,7 +51,6 @@ class FloatParam:
     maximum: float = 100
     singleStep: float = 1
 
-
 @dataclass
 class ChoiceParam:
     """Choice Parameter"""
@@ -74,9 +70,6 @@ class ChoiceParam:
 
 class BaseSegmentation(QWidget, QThread):
     """Abstract segmentation"""
-
-    frame_changed = pyqtSignal(int)
-    values_changed = pyqtSignal(int)
 
     params = {}
 
@@ -122,8 +115,6 @@ class BaseSegmentation(QWidget, QThread):
 
     def save(self, file_name: str):
         """Loads a file of value"""
-        pprint(self)
-        pprint(self.__dict__)
         with open(file_name, 'w') as conn:
             json.dump(self.values, conn)
 
