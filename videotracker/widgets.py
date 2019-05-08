@@ -6,17 +6,15 @@
 from PyQt5.QtWidgets import (QWidget, QMainWindow, QAction, #QMessageBox,
                              QFileDialog, qApp, QCheckBox, QPushButton,
                              QGridLayout, QDockWidget, QVBoxLayout, QBoxLayout,
-                             QProgressBar, QLabel, QSizePolicy, QScrollArea,
-                             QSlider, QHBoxLayout, QSpinBox, QMessageBox)
+                             QLabel, QSizePolicy, QScrollArea, QSlider,
+                             QHBoxLayout, QSpinBox, QMessageBox)
 from PyQt5.QtGui import QIcon, QPalette, QImage, QPixmap
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, pyqtSignal
 
 import cv2
 
 from . import segmentations
 from .video import Video
-
-import gc
 
 class ImageView(QWidget):
     """The view area.
@@ -37,6 +35,10 @@ class ImageView(QWidget):
     # getters with private attributes. There is 6 user-facing attributes in
     # total and that is very managable.
     # pylint: disable=too-many-instance-attributes
+
+    pos_changed = pyqtSignal(int)
+    # Frame that we have changed to
+
     @property
     def scale(self):
         """The scale of the image
@@ -112,6 +114,17 @@ class ImageView(QWidget):
         self.slider.setValue(value)
         self.sbox.setValue(value)
         self.slidelabel.setText(self.lab_text_template.format(value, self.pos_max))
+        self.pos_changed.emit(value)
+
+    @property
+    def enabled(self) -> bool:
+        """State of the controls"""
+        return self._enabled
+    @enabled.setter
+    def enabled(self, value: bool):
+        self._enabled = value
+        self.slider.setEnabled(value)
+        self.sbox.setEnabled(value)
 
     def __init__(self):
         super().__init__()
@@ -119,6 +132,7 @@ class ImageView(QWidget):
         self.create_gui()
         self.pos_max = 0
         self.frame = None
+        self._enabled = False
 
     def create_gui(self):
         """Creates the image view gui
@@ -209,6 +223,8 @@ class SideDock(QDockWidget):
     # issue.
     # pylint: disable=too-many-instance-attributes
 
+    started = pyqtSignal(bool)
+
     @property
     def csv_file(self):
         """Output location of the csv file.
@@ -253,8 +269,10 @@ class SideDock(QDockWidget):
         self.csv_cbox.blockSignals(True)
         if value:
             self.csv_cbox.setCheckState(2)
+            self.custom.csv_file = self.csv_file
         else:
             self.csv_cbox.setCheckState(0)
+            self.custom.csv_file = None
         self.csv_cbox.blockSignals(False)
         self.csv_button.setEnabled(self.csv)
 
@@ -272,8 +290,10 @@ class SideDock(QDockWidget):
         self.vid_cbox.blockSignals(True)
         if value:
             self.vid_cbox.setCheckState(2)
+            self.custom.vid_out_file = self.vid_file
         else:
             self.vid_cbox.setCheckState(0)
+            self.custom.vid_out_file = None
         self.vid_cbox.blockSignals(False)
         self.vid_button.setEnabled(self.vid)
 
@@ -299,19 +319,25 @@ class SideDock(QDockWidget):
         """Boolean indicating the state of the system.
 
         Setting this to True will cause a progress bar to become visible and the
-        button label to change to 'Pause'. Go will be set if the value is set to False.
+        button label to change to 'Cancel'. Go will be set if the value is set to False.
         """
         return self._running
     @running.setter
     def running(self, value: bool):
         # pylint: disable=attribute-defined-outside-init
         self._running = value
-        if self._running:
-            self.go_button.setText('Pause')
-            self.progress.setVisible(True)
+        for widget in self.disabled_group:
+            widget.setEnabled(not self._running)
+        self.custom.running = value
+        # This might seem strange and effectless, but it does reset the buttons
+        # to the correct state.
+        self.vid = self.vid
+        self.csv = self.csv
+        if value:
+            self.go_button.setText('Cancel')
         else:
             self.go_button.setText('Go')
-            #self.progress.setVisible(False)
+        self.started.emit(self._running)
 
     def __init__(self, custom=None):
         super().__init__('Options')
@@ -368,8 +394,6 @@ class SideDock(QDockWidget):
                                       statusTip='Output video')
         self.preview_cbox = QCheckBox('Preview', statusTip='Show video during computation',
                                       stateChanged=lambda x: setattr(self, 'checked', bool(x)))
-        self.progress = QProgressBar()
-        self.progress.setHidden(True)
         self.go_button = QPushButton('Go', maximumWidth=50,
                                      clicked=lambda x: setattr(self, 'running', not self.running),
                                      enabled=False)
@@ -381,7 +405,10 @@ class SideDock(QDockWidget):
         inner_grid.addWidget(self.vid_button, 1, 1)
         inner_grid.addWidget(self.preview_cbox, 2, 0)
         inner_grid.addWidget(self.go_button, 2, 1)
-        inner_grid.addWidget(self.progress, 3, 0, 3, 3)
+        self.disabled_group = [
+            self.csv_cbox, self.csv_button,
+            self.vid_cbox, self.vid_button,
+        ]
         # wrapped in a vbox
         layout = QVBoxLayout()
         self.custom_box = QBoxLayout(1)
@@ -403,6 +430,18 @@ class MainView(QMainWindow):
     TITLE = 'pyqt-stuff'
     actions = {}
 
+    @property
+    def running(self) -> bool:
+        """Running state of the main window"""
+        return self._running
+    @running.setter
+    def running(self, value: bool):
+        self._running = value
+        for action in self.actions['&View'][4:9]:
+            action.setEnabled(not value)
+        self.image.enabled = not value
+        self.options.enabled = not value
+
     def __init__(self, csv=None, vid=None, in_vid=None):
         super().__init__()
         self.create_gui()
@@ -410,6 +449,7 @@ class MainView(QMainWindow):
         self.setWindowTitle(self.TITLE)
         self.capture = None
         self.frame = None
+        self._running = False
         # Actions based on arguments
         self.video_file = in_vid
         if self.video_file:
@@ -427,29 +467,35 @@ class MainView(QMainWindow):
         self.statusbar.showMessage('Ready')
         # Dock
         self.options = segmentations.ThresholdSegmentation()
-        for widget in self.options.widgets:
-            self.options.widgets[widget]['widget'].valueChanged.connect(self.compute_image)
+        self.options.values_changed.connect(self.compute_image)
+        self.options.results_changed.connect(self.display_image)
         self.dock = SideDock(self.options)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.dock)
+        self.dock.started.connect(lambda x: setattr(self, 'running', x))
         # Image
         self.image = ImageView()
-        self.image.slider.valueChanged.connect(self.grab_frame)
+        self.image.pos_changed.connect(self.grab_frame)
         self.setCentralWidget(self.image)
         self.resize(800, 500)
+
+    def display_image(self):
+        """Displays the image recieved from the options"""
+        contours = self.options.result
+        frame = self.frame.copy()
+        frame = cv2.drawContours(frame, contours, -1, (0, 0, 255), 3)
+        self.image.image = frame
 
     def compute_image(self):
         """Computes the image using the function from self.options"""
         if self.dock.preview and self.frame is not None:
             try:
-                contours = self.options.function(self.frame, **self.options.values)
+                #contours = self.options.function(self.frame, **self.options.values)
+                self.options.frame = self.frame
+                self.options.start()
+                #contours = self.options.compute(self.frame)
             except cv2.error as exception:
                 #QMessageBox.critical(self, 'Critical Problem', str(e))
-                print(exception)
                 self.statusbar.showMessage(str(exception))
-            else:
-                frame = self.frame.copy()
-                frame = cv2.drawContours(frame, contours, -1, (0, 0, 255), 3)
-                self.image.image = frame
 
     def create_actions(self):
         """Creates all actions"""
