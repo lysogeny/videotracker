@@ -14,6 +14,8 @@ from PyQt5.QtCore import QThread, pyqtSignal
 
 import cv2
 
+from .video import Video
+
 @dataclass
 class BaseParam:
     """Parameter base"""
@@ -71,40 +73,86 @@ class ChoiceParam:
 class SegmentationThread(QThread):
     """A thread for segmentations
 
-    Apparently Qt5 does not like you mixing QThread with QWidget.
+    This also contains the Video.
     """
+    # Apparently Qt5 does not like you mixing QThread with QWidget.
 
+    # Signal emitted when a new frame is loaded
     frame_changed = pyqtSignal(int)
+    # Signal emitted when a new result was computed
     results_changed = pyqtSignal(int)
+    # Signal emitted when a new video is loaded
+    video_changed = pyqtSignal(str)
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, video=None, **kwargs):
         super().__init__(*args, **kwargs)
-        self.result = None
+        # Paused is a parameter that only has an effect when self.running. It
+        # injects a 0.1s sleep loop until set to False
         self.paused = False
-        self.video = None
+        # running defines which event loop is run. One that only runs over a
+        # single frame, or one that iterates over the whole video
         self.running = False
+        # video is a parameter that holds the video capture device
+        self.video = None
+        # Various output files.
         self.csv_file = None
         self.vid_out_file = None
-        self.vid_in_file = None
+        self.vid_in_file = video
+        self.video_frame = None
+        # Result is the parameter than can be grabbed by other things when we
+        # emit a signal on results_changed.
+        # self.frame stores the raw frame.
+        #self.contours stores contours
+        self.result = None
         self.frame = None
-        self.video_frame = 0
+        self.contours = None
+        # Options that must be defined by the parent widget.
+        self.options = {}
+
+    def set_video(self, file_name):
+        """Sets the video property of this class"""
+        if file_name:
+            self.vid_in_file = file_name
+            self.video_changed.emit(file_name)
+
+    def set_position(self, position: int):
+        """Sets the video position. Used as a slot for signals from beyond"""
+        self.video_frame = position
 
     def pause(self):
-        """Pauses the thread"""
+        """Toggles pause on the thread"""
         self.paused = not self.paused
+
+    def render(self):
+        """Renders polygons on the image frame"""
+        frame = self.frame.copy()
 
     def run(self):
         """Methods"""
+        self.video = Video(self.vid_in_file)
         if self.running:
-            while self.running:
-                self.frame_changed.emit(self.video_frame)
-                self.result = self.function(self.frame, **self.options)
-                self.result_changed.emit(self.video_frame)
+            for frame in self.video:
+                print('hi, loop')
+                self.frame = frame
+                self.frame_changed.emit(self.video.position)
+                print(frame)
+                self.contours = self.function(frame, **self.options)
+                #self.render()
+                self.result = cv2.drawContours(frame, self.contours, -1, (0, 0, 255), 3)
+                self.results_changed.emit(self.video_frame)
+                if not self.running:
+                    break
                 if self.paused:
                     self.msleep(100)
         else:
-            self.result = self.function(self.frame, **self.options)
-            self.result_changed.emit(self.video_frame)
+            # Frame should hopefully stay the same.
+            print('hi, oneshot')
+            self.video.position = self.video_frame
+            print(self.video.position)
+            self.frame = self.video.grab(self.video_frame)
+            self.contours = self.function(self.frame, **self.options)
+            self.result = cv2.drawContours(self.frame, self.contours, -1, (0, 0, 255), 3)
+            self.results_changed.emit(self.video_frame)
 
     def function(self, *args, **kwargs):
         """Function that defines the segmentation"""

@@ -16,6 +16,23 @@ import cv2
 from . import segmentations
 from .video import Video
 
+class BaseWidget(QWidget):
+    """An abstract widget"""
+    def __init__(self, *args, **kwargs):
+        super().__init__(self, *args, **kwargs)
+        self.create_widgets()
+        self.create_actions()
+        self.handle_widgets()
+        self.handle_actions()
+
+    def create_gui(self):
+        """Method for creating gui elements. self.layout, other things"""
+        raise NotImplementedError
+
+    def create_actions(self):
+        """Method for creating this widget's associated actions."""
+        raise NotImplementedError
+
 class ImageView(QWidget):
     """The view area.
 
@@ -115,6 +132,10 @@ class ImageView(QWidget):
         self.sbox.setValue(value)
         self.slidelabel.setText(self.lab_text_template.format(value, self.pos_max))
         self.pos_changed.emit(value)
+
+    def set_position(self, value: int):
+        """Sets the position. Used as a slot for other widgets"""
+        self.pos = value
 
     @property
     def enabled(self) -> bool:
@@ -422,7 +443,14 @@ class SideDock(QDockWidget):
         self.setWidget(widget)
 
 class MainView(QMainWindow):
-    """An abstract main view"""
+    """A main view
+
+    This main view has four principal states consisting of a combination of
+    running and loaded.
+    These states define which GUI elements are enabled at which given timepoint.
+
+    This widget unites a ImageView and SideDock widget
+    """
     # Is 8/7 instance attributes really too many? Considering that this is a
     # main window, that is impressively low.
     # pylint: disable=too-many-instance-attributes
@@ -433,23 +461,65 @@ class MainView(QMainWindow):
     @property
     def running(self) -> bool:
         """Running state of the main window"""
-        return self._running
+        return self.state['running']
     @running.setter
     def running(self, value: bool):
-        self._running = value
+        self.state['running'] = value
+        # Disable framecontrol actions
         for action in self.actions['&View'][4:9]:
             action.setEnabled(not value)
-        self.image.enabled = not value
+        # Disable option controls
         self.options.enabled = not value
+        # Set the frame control to be handled by the sidebar, allowing it to
+        # step to the next frames.
+        self.image_control = not value
+
+    @property
+    def loaded(self) -> bool:
+        """Has a video been loaded?"""
+        return self.state['loaded']
+    @loaded.setter
+    def loaded(self, value: bool):
+        self.state['loaded'] = value
+        for action in self.actions['&View']:
+            action.setEnabled(value)
+        self.dock.go_button.setEnabled(value)
+
+    @property
+    def image_control(self) -> bool:
+        """Is the ImageView controlling the frames?"""
+        return self.state['image_control']
+    @image_control.setter
+    def image_control(self, value: bool):
+        self.state['image_control'] = value
+        self.image.enabled = value
+        # Reconnect signals
+        try:
+            self.options.thread.frame_changed.disconnect()
+        except TypeError:
+            pass
+        try:
+            self.image.pos_changed.disconnect()
+        except TypeError:
+            pass
+        if value:
+            self.image.pos_changed.connect(self.compute_image)
+        else:
+            self.options.thread.frame_changed.connect(self.image.set_position)
 
     def __init__(self, csv=None, vid=None, in_vid=None):
         super().__init__()
+        self.state = {
+            'running': False,
+            'loaded': False,
+            'image_control': False
+        }
         self.create_gui()
         self.create_actions()
         self.setWindowTitle(self.TITLE)
         self.capture = None
-        self.frame = None
-        self._running = False
+        self.running = False
+        self.loaded = False
         # Actions based on arguments
         self.video_file = in_vid
         if self.video_file:
@@ -467,30 +537,30 @@ class MainView(QMainWindow):
         self.statusbar.showMessage('Ready')
         # Dock
         self.options = segmentations.ThresholdSegmentation()
-        self.options.values_changed.connect(self.compute_image)
-        self.options.results_changed.connect(self.display_image)
+        self.options.values_changed.connect(self.recompute_image)
+        self.options.results_changed.connect(self.draw_contours)
         self.dock = SideDock(self.options)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.dock)
         self.dock.started.connect(lambda x: setattr(self, 'running', x))
         # Image
         self.image = ImageView()
-        self.image.pos_changed.connect(self.grab_frame)
         self.setCentralWidget(self.image)
         self.resize(800, 500)
 
-    def display_image(self):
-        """Displays the image recieved from the options"""
-        contours = self.options.result
-        frame = self.frame.copy()
-        frame = cv2.drawContours(frame, contours, -1, (0, 0, 255), 3)
-        self.image.image = frame
+    def draw_contours(self):
+        """Draw contours onto the image device"""
+        self.image.image = self.options.thread.result
 
-    def compute_image(self):
+    def recompute_image(self, values):
+        """Recomputes the image"""
+        self.compute_image(index=self.options.thread.video_frame)
+
+    def compute_image(self, index=None):
         """Computes the image using the function from self.options"""
-        if self.dock.preview and self.frame is not None:
+        self.options.thread.set_position(index)
+        if self.dock.preview:
             try:
                 #contours = self.options.function(self.frame, **self.options.values)
-                self.options.frame = self.frame
                 self.options.start()
                 #contours = self.options.compute(self.frame)
             except cv2.error as exception:
@@ -573,13 +643,6 @@ class MainView(QMainWindow):
                 if menu not in ('&Help') and not action.icon().isNull():
                     self.toolbar.addAction(action)
 
-    def grab_frame(self, number: int):
-        """Grabs frame number from the video device"""
-        frame = self.capture.grab(number)
-        self.frame = frame
-        self.image.image = frame
-        self.compute_image()
-
     def video_pick(self):
         """Spawn a video picking dialog"""
         file_name = QFileDialog.getOpenFileName(self, 'Open file', self.video_file)
@@ -592,19 +655,15 @@ class MainView(QMainWindow):
             if not self.dock.csv_file:
                 self.dock.csv_file = file_name_base + '_output.' + 'csv'
 
-    def video_load(self):
+    def video_load(self, video_file=None):
         """Loads a video file"""
-        self.capture = Video(self.video_file)
-        # Set image of imageviewer, new maximum position
+        if video_file:
+            self.video_file = video_file
+        video_tmp = Video(self.video_file)
         self.image.reset()
-        self.image.image = self.capture.frame
-        self.frame = self.capture.frame
-        self.image.pos_max = self.capture.frames
-        # Enable all view actions
-        for action in self.actions['&View']:
-            action.setEnabled(True)
-        # Print message
+        self.image.pos_max = video_tmp.frames
+        del video_tmp
+        self.options.thread.set_video(self.video_file)
+        # Set image of imageviewer, new maximum position
+        self.loaded = True
         self.statusbar.showMessage('Loaded file {}'.format(self.video_file))
-        # Enable dock go button
-        self.dock.go_button.setEnabled(True)
-        # Give dock some basic idea of file names
