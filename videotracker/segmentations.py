@@ -1,6 +1,9 @@
 """Various segmentation methods"""
 
 import json
+import csv
+
+from types import MethodType
 from pprint import pprint
 
 from typing import Callable
@@ -15,6 +18,7 @@ from PyQt5.QtCore import QThread, pyqtSignal
 import cv2
 
 from .video import Video
+from . import contours
 
 @dataclass
 class BaseParam:
@@ -67,6 +71,12 @@ class ChoiceParam:
         for label, choice in zip(self.labels, self.choices):
             widget.addItem(label, choice)
         widget.valueChanged = widget.currentIndexChanged
+        # setValue for QComboBox
+        def set_data(self, data=None):
+            """Method for setting the data of the QComboBox"""
+            print(self)
+            self.setCurrentIndex(self.findData(data))
+        widget.setValue = MethodType(set_data, widget)
         widget.value = widget.currentData
         return dictionary
 
@@ -83,6 +93,8 @@ class SegmentationThread(QThread):
     results_changed = pyqtSignal(int)
     # Signal emitted when a new video is loaded
     video_changed = pyqtSignal(str)
+    # Signal to indicate that the loop has run out of frames.
+    loop_complete = pyqtSignal(bool)
 
     def __init__(self, *args, video=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -96,7 +108,7 @@ class SegmentationThread(QThread):
         self.video = None
         # Various output files.
         self.csv_file = None
-        self.vid_out_file = None
+        self.vid_file = None
         self.vid_in_file = video
         self.video_frame = None
         # Result is the parameter than can be grabbed by other things when we
@@ -131,19 +143,40 @@ class SegmentationThread(QThread):
         """Methods"""
         self.video = Video(self.vid_in_file)
         if self.running:
+            print('loop')
+            if self.csv_file:
+                connection = open(self.csv_file, 'w')
+                csv_writer = csv.DictWriter(connection, fieldnames=contours.FEATURES)
+                csv_writer.writeheader()
+            if self.vid_file:
+                fourcc = cv2.VideoWriter_fourcc(*self.video.fourcc)
+                print('a')
+                out = cv2.VideoWriter(self.vid_file, fourcc, self.video.framerate, self.video.resolution)
             for frame in self.video:
-                print('hi, loop')
                 self.frame = frame
                 self.frame_changed.emit(self.video.position)
-                print(frame)
                 self.contours = self.function(frame, **self.options)
+                output = contours.extract_features(self.contours)
+                print('[{:>5}/{:>5}] {}'.format(self.video.position,
+                                                self.video.frames, len(output)))
+                if self.csv_file:
+                    for row in output:
+                        row.update({'timestamp': self.video.time, 'frame': self.video.position})
+                        csv_writer.writerow(row)
                 #self.render()
                 self.result = cv2.drawContours(frame, self.contours, -1, (0, 0, 255), 3)
                 self.results_changed.emit(self.video_frame)
+                if self.vid_file:
+                    out.write(self.result)
                 if not self.running:
                     break
                 if self.paused:
                     self.msleep(100)
+            if self.csv_file:
+                connection.close()
+            if self.vid_file:
+                out.release()
+            self.loop_complete.emit(True)
         else:
             # Frame should hopefully stay the same.
             print('hi, oneshot')
@@ -240,6 +273,7 @@ class BaseSegmentation(QWidget):
         """Loads a file of value"""
         with open(file_name, 'r') as conn:
             values = json.load(conn)
+        print(values)
         self.values = values
 
     def save(self, file_name: str):

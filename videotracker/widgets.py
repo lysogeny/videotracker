@@ -92,8 +92,6 @@ class ImageView(QWidget):
         bytes_per_line = channels*width
         qimg = QImage(frame.data, width, height, bytes_per_line, QImage.Format_RGB888)
         self.image_lab.setPixmap(QPixmap.fromImage(qimg))
-        self.slider.setEnabled(True)
-        self.sbox.setEnabled(True)
         if first:
             self.scale = 1.0
         else:
@@ -260,6 +258,10 @@ class SideDock(QDockWidget):
     def csv_file(self, value: str):
         self.files['csv'] = value
         self.csv_button.setStatusTip(value)
+        if self.csv:
+            self.custom.thread.csv_file = value
+        else:
+            self.custom.thread.csv_file = None
 
     @property
     def vid_file(self):
@@ -275,6 +277,10 @@ class SideDock(QDockWidget):
     def vid_file(self, value: str):
         self.files['vid'] = value
         self.vid_button.setStatusTip(value)
+        if self.vid:
+            self.custom.thread.vid_file = value
+        else:
+            self.custom.thread.vid_file = None
 
     @property
     def csv(self):
@@ -473,6 +479,11 @@ class MainView(QMainWindow):
         # Set the frame control to be handled by the sidebar, allowing it to
         # step to the next frames.
         self.image_control = not value
+        self.options.thread.running = value
+        self.options.running = value
+        self.image_control = not value
+        if value:
+            self.options.thread.start()
 
     @property
     def loaded(self) -> bool:
@@ -487,12 +498,15 @@ class MainView(QMainWindow):
 
     @property
     def image_control(self) -> bool:
-        """Is the ImageView controlling the frames?"""
+        """Is the ImageView controlling the frames?
+
+        True: frames controlled by imageview (self.image)
+        False: frames controlled by self.options.thread
+        """
         return self.state['image_control']
     @image_control.setter
     def image_control(self, value: bool):
         self.state['image_control'] = value
-        self.image.enabled = value
         # Reconnect signals
         try:
             self.options.thread.frame_changed.disconnect()
@@ -506,6 +520,7 @@ class MainView(QMainWindow):
             self.image.pos_changed.connect(self.compute_image)
         else:
             self.options.thread.frame_changed.connect(self.image.set_position)
+        self.image.enabled = value
 
     def __init__(self, csv=None, vid=None, in_vid=None):
         super().__init__()
@@ -539,6 +554,8 @@ class MainView(QMainWindow):
         self.options = segmentations.ThresholdSegmentation()
         self.options.values_changed.connect(self.recompute_image)
         self.options.results_changed.connect(self.draw_contours)
+        self.options.thread.finished.connect(lambda: setattr(self, 'running', False))
+        self.options.thread.loop_complete.connect(lambda: setattr(self, 'running', False))
         self.dock = SideDock(self.options)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.dock)
         self.dock.started.connect(lambda x: setattr(self, 'running', x))
@@ -551,7 +568,7 @@ class MainView(QMainWindow):
         """Draw contours onto the image device"""
         self.image.image = self.options.thread.result
 
-    def recompute_image(self, values):
+    def recompute_image(self):
         """Recomputes the image"""
         self.compute_image(index=self.options.thread.video_frame)
 

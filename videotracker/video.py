@@ -33,7 +33,7 @@ class Video:
     @property
     def position(self) -> int:
         """The position in the video"""
-        return self.capture.get(cv2.CAP_PROP_POS_FRAMES)
+        return int(self.capture.get(cv2.CAP_PROP_POS_FRAMES))
     @position.setter
     def position(self, position: int):
         """Sets the new frame index"""
@@ -53,7 +53,7 @@ class Video:
     @property
     def framerate(self) -> float:
         """Framerate of the video"""
-        self.framerate = self.capture.get(cv2.CAP_PROP_FPS)
+        return self.capture.get(cv2.CAP_PROP_FPS)
 
     @property
     def frames(self) -> int:
@@ -71,12 +71,20 @@ class Video:
                 int(self.capture.get(cv2.CAP_PROP_FRAME_HEIGHT)))
 
     @property
+    def fourcc(self) -> str:
+        """FOURCC of the video capture device"""
+        fcc = int(self.capture.get(cv2.CAP_PROP_FOURCC))
+        # from opencv samples.
+        return "".join([chr((fcc >> 8 * i) & 0xFF) for i in range(4)])
+
+    @property
     def frame(self):
         """Current frame"""
         if self._new or self._frame is None:
             # Avoid unnecessary read operations.
             # Possible issues: Doesn't read increment the position?
             exists, frame = self.capture.read()
+            self.position -= 1
             if exists:
                 self._frame = frame
                 self._new = False
@@ -111,14 +119,13 @@ class Video:
         return self
 
     def __next__(self):
-        if self.position > self.frames:
+        exists, frame = self.capture.read()
+        if not exists:
             self.stopped = True
         if self.stopped:
             self.capture.release()
             raise StopIteration
-        else:
-            self.position += 1
-            return self.frame
+        return frame
 
     def __repr__(self):
         return '<Video at {}>'.format(self.file_name)
