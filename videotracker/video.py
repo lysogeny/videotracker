@@ -57,7 +57,10 @@ class Video:
 
     @property
     def frames(self) -> int:
-        """Total amount of frames in the video"""
+        """Total amount of frames in the video
+
+        Note that if the video header does not contain this information, this may be inaccurate.
+        """
         return int(self.capture.get(cv2.CAP_PROP_FRAME_COUNT))
 
     @property

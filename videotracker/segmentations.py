@@ -124,6 +124,7 @@ class SegmentationThread(QThread):
     def input_file(self, value: str):
         self._input_file = value
         self.input_changed = True
+        print('input_file: {}, change {}'.format(self._input_file, self.input_changed))
 
     @property
     def position(self) -> int:
@@ -235,6 +236,7 @@ class SegmentationThread(QThread):
             self.computing.emit(True)
             print('position changed')
             self.video.position = self.position
+            print('Video {}'.format(self.input_file))
             self.frame = self.video.grab(self.position)
             self.frame_changed.emit(self.video.position)
             print('regrab complete')
@@ -262,6 +264,7 @@ class SegmentationThread(QThread):
                 if self.video is not None:
                     self.video.close()
                 self.video = Video(self.input_file)
+                print('position: {}'.format(self.video.position))
                 self.input_changed = False
             # This is what will happen here: if the running flag has been set
             # (i.e. by hitting the run button), the full loop will be exectued
@@ -417,6 +420,7 @@ class ThresholdSegmentation(BaseSegmentation):
         Returns polygons
         """
         # pylint: disable=too-many-arguments,no-self-use, arguments-differ
+        # pylint: disable=redefined-outer-name
         # I need this many arguments, and I can't have this as not a method.
         # Additionally, this method can't have a predefined set of parameters.
         frame = img.copy()

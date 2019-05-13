@@ -514,6 +514,7 @@ class MainView(QMainWindow):
             self.options.thread.start()
         else:
             helpers.disconnect(self.options.values_changed)
+            self.options.thread.stop()
 
     @property
     def image_control(self) -> bool:
@@ -556,7 +557,7 @@ class MainView(QMainWindow):
         self.dock.vid = vid is not None
 
     def change_cursor(self, value: bool):
-        """Changes cursor for the app. When true changes to hourglass, when false returns to normal"""
+        """Changes cursor for the app. When true changes to hourglass, when false to normal"""
         if value:
             qApp.setOverrideCursor(Qt.WaitCursor)
         else:
@@ -688,8 +689,18 @@ class MainView(QMainWindow):
             self.video_file = video_file
         # we temporarily create a video object to determine the max frames count.
         video_tmp = Video(self.video_file)
+        # Get the maximum amount of frames in this video. Because OpenCV is a
+        # bit idiotic, we have to do this slightly strangely.  The property you
+        # use to get the maximum frames in opencv is a bit buggy and only works
+        # sometimes. Other options include iterating over everything, but that
+        # is quite slow as well.  Thus here we set the position to the end of
+        # the file and then read out the position in frames that we are at.
+        # We then have to subtract one, I have no idea why though, but otherwise it crashes.
+        self.loaded = False
         self.image.reset()
-        self.image.pos_max = video_tmp.frames
+        video_tmp.capture.set(cv2.CAP_PROP_POS_AVI_RATIO, 1.0)
+        self.image.pos_max = int(video_tmp.capture.get(cv2.CAP_PROP_POS_FRAMES)) - 1
+        video_tmp.close()
         del video_tmp
         self.options.thread.input_file = self.video_file
         self.options.thread.options = self.options.values

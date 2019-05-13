@@ -43,6 +43,9 @@ Bugs
 - [ ] Output polygon colour is red while video polygon colour is blue
 - [ ] Spaghetti Bolognese signal infrastructure deserves cleanup.
 - [ ] Issues loading first couple of frames when first frame is no keyframe and not looping.
+- [ ] Crash when frame that does not exist is loaded. This is down to
+      cv2.CAP_PROP_FRAME_COUNT reporting invalid frame counts in some instances.
+      Proposed fix is changing to a time slider or iterating over all frames.
 - [x] Single frame previews are slow -> best they are going to be
 - [x] Preview checkbox does nothing
 - [x] After completion state is not reset to not running
