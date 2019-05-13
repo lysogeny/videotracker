@@ -16,10 +16,10 @@ Feature list
     - [ ] Optical flow tracking
     - [ ] Other methods?
 - [x] Display polygons
-- [ ] Display other frames
-- [ ] CSV output
-- [ ] Video output
-- [ ] Running tracking
+- [x] Display other frames
+- [x] CSV output
+- [x] Video output
+- [x] Running tracking
 - [ ] Connecting tracked objects to form paths
 - [ ] Diagnostics plots
 - [ ] Packaging
@@ -33,14 +33,30 @@ Feature list
 - [x] Panning through videos
 - [x] Zoom in videos
 - [x] Some kind of a GUI
+- [ ] Batch mode
+
+Bugs
+----
+
+- [ ] After completion state is not reset to not running
+- [ ] Video and csv outputs are not automatically set when checking boxes.
+- [ ] File... buttons are not disabled when running
+- [ ] Option load... is not disabled when running
+- [ ] Play button not connected to start
+- [ ] Single frame previews are slow
+- [ ] Preview checkbox does nothing
+- [ ] `video.frames` is wrong (mismatch in actual maximum frames and frames).
+- [ ] Output polygon colour is red while video polygon colour is blue
+- [ ] Current file name is not displayd anywhere
+- [ ] Video and csv output files are not reset when new file is loaded.
 
 
 Minor features
 --------------
 
-- [ ] Play button timer
-- [ ] KeyboardInterrupt 
+- [x] KeyboardInterrupt 
 - [ ] Colour choices for output polygon tracking thing
+- [ ] Hypermodular segmentation modules: combine all of your favourite cv2 functions into a method.
 
 
 Requirements
