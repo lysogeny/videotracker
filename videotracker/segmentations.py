@@ -145,12 +145,13 @@ class SegmentationThread(QThread):
         if self.running:
             print('loop')
             if self.csv_file:
+                print('Writing csv: {}'.format(self.csv_file))
                 connection = open(self.csv_file, 'w')
                 csv_writer = csv.DictWriter(connection, fieldnames=contours.FEATURES)
                 csv_writer.writeheader()
             if self.vid_file:
+                print('Writing video: {}'.format(self.vid_file))
                 fourcc = cv2.VideoWriter_fourcc(*self.video.fourcc)
-                print('a')
                 out = cv2.VideoWriter(self.vid_file, fourcc, self.video.framerate, self.video.resolution)
             for frame in self.video:
                 self.frame = frame
@@ -233,8 +234,9 @@ class BaseSegmentation(QWidget):
         for row, widget in enumerate(self.widgets):
             self.layout.addWidget(self.widgets[widget]['widget'], row, 0)
             self.layout.addWidget(self.widgets[widget]['label'], row, 1)
+        self.load_button = QPushButton('Load...', pressed=self.load_values)
+        self.layout.addWidget(self.load_button)
         self.layout.addWidget(QPushButton('Save...', pressed=self.save_values))
-        self.layout.addWidget(QPushButton('Load...', pressed=self.load_values))
         for widget in self.widgets:
             self.widgets[widget]['widget'].valueChanged.connect(self.emit_values)
 
@@ -253,6 +255,7 @@ class BaseSegmentation(QWidget):
     @enabled.setter
     def enabled(self, value: bool):
         self._enabled = value
+        self.load_button.setEnabled(value)
         for widget in self.widgets:
             self.widgets[widget]['widget'].setEnabled(value)
 

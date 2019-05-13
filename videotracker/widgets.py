@@ -2,6 +2,7 @@
 
 #import copy
 #from collections import defaultdict
+import os
 
 from PyQt5.QtWidgets import (QWidget, QMainWindow, QAction, #QMessageBox,
                              QFileDialog, qApp, QCheckBox, QPushButton,
@@ -296,10 +297,10 @@ class SideDock(QDockWidget):
         self.csv_cbox.blockSignals(True)
         if value:
             self.csv_cbox.setCheckState(2)
-            self.custom.csv_file = self.csv_file
+            self.custom.thread.csv_file = self.csv_file
         else:
             self.csv_cbox.setCheckState(0)
-            self.custom.csv_file = None
+            self.custom.thread.csv_file = None
         self.csv_cbox.blockSignals(False)
         self.csv_button.setEnabled(self.csv)
 
@@ -317,10 +318,10 @@ class SideDock(QDockWidget):
         self.vid_cbox.blockSignals(True)
         if value:
             self.vid_cbox.setCheckState(2)
-            self.custom.vid_out_file = self.vid_file
+            self.custom.thread.vid_file = self.vid_file
         else:
             self.vid_cbox.setCheckState(0)
-            self.custom.vid_out_file = None
+            self.custom.thread.vid_file = None
         self.vid_cbox.blockSignals(False)
         self.vid_button.setEnabled(self.vid)
 
@@ -355,16 +356,19 @@ class SideDock(QDockWidget):
         self._running = value
         for widget in self.disabled_group:
             widget.setEnabled(not self._running)
-        self.custom.running = value
+        self.custom.enabled = not value
+        self.custom.thread.running = value
         # This might seem strange and effectless, but it does reset the buttons
         # to the correct state.
         self.vid = self.vid
         self.csv = self.csv
+        # Disables csv and video selections buttons
+        self.csv_button.setEnabled(not value)
+        self.vid_button.setEnabled(not value)
         if value:
-            self.go_button.setText('Cancel')
+            self.go_button.setText('Stop')
         else:
             self.go_button.setText('Go')
-        self.started.emit(self._running)
 
     def __init__(self, custom=None):
         super().__init__('Options')
@@ -374,6 +378,11 @@ class SideDock(QDockWidget):
         self.create_gui()
         self.preview = True
         self.running = False
+
+    def emit_go(self):
+        """Emits a go signal"""
+        # This boolean value needs to emit the negated running state
+        self.started.emit(not self.running)
 
     def pick_csv(self):
         """Picks csv output location
@@ -421,9 +430,7 @@ class SideDock(QDockWidget):
                                       statusTip='Output video')
         self.preview_cbox = QCheckBox('Preview', statusTip='Show video during computation',
                                       stateChanged=lambda x: setattr(self, 'checked', bool(x)))
-        self.go_button = QPushButton('Go', maximumWidth=50,
-                                     clicked=lambda x: setattr(self, 'running', not self.running),
-                                     enabled=False)
+        self.go_button = QPushButton('Go', maximumWidth=50, clicked=self.emit_go, enabled=False)
         # Grid layout
         inner_grid = QGridLayout()
         inner_grid.addWidget(self.csv_cbox, 0, 0)
@@ -470,17 +477,23 @@ class MainView(QMainWindow):
         return self.state['running']
     @running.setter
     def running(self, value: bool):
+        # set internal variable
         self.state['running'] = value
         # Disable framecontrol actions
-        for action in self.actions['&View'][4:9]:
+        for action in self.actions['&View'][5:9]:
             action.setEnabled(not value)
+        if value:
+            self.actions['&View'][4].setIcon(QIcon.fromTheme('media-playback-stop'))
+        else:
+            self.actions['&View'][4].setIcon(QIcon.fromTheme('media-playback-start'))
         # Disable option controls
-        self.options.enabled = not value
+        self.dock.running = value
+        #self.options.running = value
+        #self.options.enabled = not value
+        #self.options.thread.running = value
+        # Set mode of subsidiary elements
         # Set the frame control to be handled by the sidebar, allowing it to
         # step to the next frames.
-        self.image_control = not value
-        self.options.thread.running = value
-        self.options.running = value
         self.image_control = not value
         if value:
             self.options.thread.start()
@@ -539,7 +552,6 @@ class MainView(QMainWindow):
         self.video_file = in_vid
         if self.video_file:
             self.video_load()
-        self.dock.csv_file = csv
         self.dock.csv = csv is not None
         self.dock.vid = vid is not None
 
@@ -554,9 +566,10 @@ class MainView(QMainWindow):
         self.options = segmentations.ThresholdSegmentation()
         self.options.values_changed.connect(self.recompute_image)
         self.options.results_changed.connect(self.draw_contours)
-        self.options.thread.finished.connect(lambda: setattr(self, 'running', False))
+        #self.options.thread.finished.connect(lambda: setattr(self, 'running', False))
         self.options.thread.loop_complete.connect(lambda: setattr(self, 'running', False))
         self.dock = SideDock(self.options)
+        self.dock.preview_cbox.stateChanged.connect(self.recompute_image)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.dock)
         self.dock.started.connect(lambda x: setattr(self, 'running', x))
         # Image
@@ -566,11 +579,13 @@ class MainView(QMainWindow):
 
     def draw_contours(self):
         """Draw contours onto the image device"""
-        self.image.image = self.options.thread.result
+        if self.dock.preview:
+            self.image.image = self.options.thread.result
 
     def recompute_image(self):
         """Recomputes the image"""
-        self.compute_image(index=self.options.thread.video_frame)
+        if self.dock.preview and not self.running:
+            self.compute_image(index=self.options.thread.video_frame)
 
     def compute_image(self, index=None):
         """Computes the image using the function from self.options"""
@@ -616,9 +631,10 @@ class MainView(QMainWindow):
                         triggered=self.image.zoom_optimal,
                         shortcut='Ctrl+2',
                         enabled=False),
-                QAction(QIcon.fromTheme('media-playback-start'), 'Play',
-                        statusTip='Plays the video',
-                        shortcut='Space', checkable=True, enabled=False),
+                QAction(QIcon.fromTheme('media-playback-start'), 'Start segmentation',
+                        statusTip='Segmentation is started',
+                        shortcut='Space', enabled=False,
+                        triggered=lambda: setattr(self, 'running', not self.running)),
                 QAction(QIcon.fromTheme('go-first'), 'Goto first frame',
                         statusTip='Goes to the first frame',
                         triggered=lambda: setattr(self.image, 'pos', 0),
@@ -666,21 +682,21 @@ class MainView(QMainWindow):
         if file_name[0]:
             self.video_file = file_name[0]
             self.video_load()
-            file_name_base = '.'.join(file_name[0].split('.')[:-1])
-            if not self.dock.vid_file:
-                self.dock.vid_file = file_name_base + '_output.' + 'mp4'
-            if not self.dock.csv_file:
-                self.dock.csv_file = file_name_base + '_output.' + 'csv'
 
     def video_load(self, video_file=None):
         """Loads a video file"""
         if video_file:
             self.video_file = video_file
+        # we temporarily create a video object to determine the max frames count.
         video_tmp = Video(self.video_file)
         self.image.reset()
         self.image.pos_max = video_tmp.frames
         del video_tmp
         self.options.thread.set_video(self.video_file)
         # Set image of imageviewer, new maximum position
+        file_tokenised = os.path.splitext(self.video_file)
+        self.dock.csv_file = file_tokenised[0] + '_output' + '.csv'
+        self.dock.vid_file = file_tokenised[0] + '_output' + file_tokenised[1]
         self.loaded = True
+        self.setWindowTitle(self.TITLE + ' ' + self.video_file)
         self.statusbar.showMessage('Loaded file {}'.format(self.video_file))

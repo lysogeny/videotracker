@@ -38,17 +38,23 @@ Feature list
 Bugs
 ----
 
-- [ ] After completion state is not reset to not running
-- [ ] Video and csv outputs are not automatically set when checking boxes.
-- [ ] File... buttons are not disabled when running
-- [ ] Option load... is not disabled when running
-- [ ] Play button not connected to start
 - [ ] Single frame previews are slow
-- [ ] Preview checkbox does nothing
 - [ ] `video.frames` is wrong (mismatch in actual maximum frames and frames).
 - [ ] Output polygon colour is red while video polygon colour is blue
-- [ ] Current file name is not displayd anywhere
-- [ ] Video and csv output files are not reset when new file is loaded.
+- [ ] Spaghetti Bolognese signal infrastructure deserves cleanup.
+- [ ] Issues loading first couple of frames when first frame is no keyframe and not looping.
+- [ ] option load value is not set to same folder by defaul
+- [x] Preview checkbox does nothing
+- [x] After completion state is not reset to not running
+- [x] csv output is not automatically defined when defining input via cli
+- [x] Video and csv outputs are not automatically set when checking boxes.
+- [x] File... buttons are not disabled when running
+- [x] Play button is disabled when segmentation runs
+- [x] Play button is still a play button when segmentation runs
+- [x] Option load... is not disabled when running
+- [x] Current file name is not displayd anywhere
+- [x] Video and csv output files are not reset when new file is loaded.
+- [x] Play button not connected to start
 
 
 Minor features
@@ -57,6 +63,8 @@ Minor features
 - [x] KeyboardInterrupt 
 - [ ] Colour choices for output polygon tracking thing
 - [ ] Hypermodular segmentation modules: combine all of your favourite cv2 functions into a method.
+- [ ] CLI flag for loading options
+- [ ] Better keybinds
 
 
 Requirements
