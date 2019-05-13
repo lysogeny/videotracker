@@ -15,6 +15,7 @@ from PyQt5.QtCore import Qt, pyqtSignal
 import cv2
 
 from . import segmentations
+from . import helpers
 from .video import Video
 
 class BaseWidget(QWidget):
@@ -482,21 +483,21 @@ class MainView(QMainWindow):
         # Disable framecontrol actions
         for action in self.actions['&View'][5:9]:
             action.setEnabled(not value)
+        self.actions['&File'][0].setEnabled(not value)
+        start_action = self.actions['&View'][4]
         if value:
-            self.actions['&View'][4].setIcon(QIcon.fromTheme('media-playback-stop'))
+            start_action.setIcon(QIcon.fromTheme('media-playback-stop'))
+            start_action.setText('Stop')
         else:
-            self.actions['&View'][4].setIcon(QIcon.fromTheme('media-playback-start'))
+            start_action.setIcon(QIcon.fromTheme('media-playback-start'))
+            start_action.setText('Start')
         # Disable option controls
         self.dock.running = value
-        #self.options.running = value
-        #self.options.enabled = not value
-        #self.options.thread.running = value
         # Set mode of subsidiary elements
         # Set the frame control to be handled by the sidebar, allowing it to
         # step to the next frames.
         self.image_control = not value
-        if value:
-            self.options.thread.start()
+        self.options.thread.running = value
 
     @property
     def loaded(self) -> bool:
@@ -509,12 +510,10 @@ class MainView(QMainWindow):
             action.setEnabled(value)
         self.dock.go_button.setEnabled(value)
         if value:
-            self.options.values_changed.connect(self.recompute_image)
+            self.options.values_changed.connect(self.options.thread.set_options)
+            self.options.thread.start()
         else:
-            try:
-                self.options.values_changed.disconnect()
-            except TypeError:
-                pass
+            helpers.disconnect(self.options.values_changed)
 
     @property
     def image_control(self) -> bool:
@@ -528,14 +527,8 @@ class MainView(QMainWindow):
     def image_control(self, value: bool):
         self.state['image_control'] = value
         # Reconnect signals
-        try:
-            self.options.thread.frame_changed.disconnect()
-        except TypeError:
-            pass
-        try:
-            self.image.pos_changed.disconnect()
-        except TypeError:
-            pass
+        helpers.disconnect(self.options.thread.frame_changed)
+        helpers.disconnect(self.image.pos_changed)
         if value:
             self.image.pos_changed.connect(self.compute_image)
         else:
@@ -562,6 +555,13 @@ class MainView(QMainWindow):
         self.dock.csv = csv is not None
         self.dock.vid = vid is not None
 
+    def change_cursor(self, value: bool):
+        """Changes cursor for the app. When true changes to hourglass, when false returns to normal"""
+        if value:
+            qApp.setOverrideCursor(Qt.WaitCursor)
+        else:
+            qApp.restoreOverrideCursor()
+
     def create_gui(self):
         """Creates the GUI"""
         # Bars
@@ -574,6 +574,7 @@ class MainView(QMainWindow):
         self.options.results_changed.connect(self.draw_contours)
         #self.options.thread.finished.connect(lambda: setattr(self, 'running', False))
         self.options.thread.loop_complete.connect(lambda: setattr(self, 'running', False))
+        self.options.thread.computing.connect(self.change_cursor)
         self.dock = SideDock(self.options)
         self.dock.preview_cbox.stateChanged.connect(self.recompute_image)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.dock)
@@ -596,14 +597,6 @@ class MainView(QMainWindow):
     def compute_image(self, index=None):
         """Computes the image using the function from self.options"""
         self.options.thread.set_position(index)
-        if self.dock.preview:
-            try:
-                #contours = self.options.function(self.frame, **self.options.values)
-                self.options.start()
-                #contours = self.options.compute(self.frame)
-            except cv2.error as exception:
-                #QMessageBox.critical(self, 'Critical Problem', str(e))
-                self.statusbar.showMessage(str(exception))
 
     def create_actions(self):
         """Creates all actions"""
@@ -698,7 +691,8 @@ class MainView(QMainWindow):
         self.image.reset()
         self.image.pos_max = video_tmp.frames
         del video_tmp
-        self.options.thread.set_video(self.video_file)
+        self.options.thread.input_file = self.video_file
+        self.options.thread.options = self.options.values
         # Set image of imageviewer, new maximum position
         file_tokenised = os.path.splitext(self.video_file)
         self.dock.csv_file = file_tokenised[0] + '_output' + '.csv'

@@ -91,98 +91,199 @@ class SegmentationThread(QThread):
     frame_changed = pyqtSignal(int)
     # Signal emitted when a new result was computed
     results_changed = pyqtSignal(int)
-    # Signal emitted when a new video is loaded
-    video_changed = pyqtSignal(str)
     # Signal to indicate that the loop has run out of frames.
     loop_complete = pyqtSignal(bool)
+    computing = pyqtSignal(bool)
+
+    @property
+    def options(self) -> dict:
+        """Options that will be used to compute images.
+
+        Setting this value changes the boolean self.options_changed to True.
+        """
+        return self._options
+    @options.setter
+    def options(self, value: dict):
+        self._options = value
+        self.options_changed = True
+
+    def set_options(self, value):
+        """Slot for a signal to set the options of this thing"""
+        self.options = value
+
+    @property
+    def input_file(self) -> str:
+        """This value is the input video that is used.
+
+        Setting his value changes input_changed to be set to True.
+        This parameter cannot set the video object itself, as that causes
+        issues with OpenCV.
+        """
+        return self._input_file
+    @input_file.setter
+    def input_file(self, value: str):
+        self._input_file = value
+        self.input_changed = True
+
+    @property
+    def position(self) -> int:
+        """This value stores the position that we have to compute"""
+        return self._position
+    @position.setter
+    def position(self, value: int):
+        self._position = value
+        self.position_changed = True
 
     def __init__(self, *args, video=None, **kwargs):
         super().__init__(*args, **kwargs)
-        # Paused is a parameter that only has an effect when self.running. It
-        # injects a 0.1s sleep loop until set to False
-        self.paused = False
-        # running defines which event loop is run. One that only runs over a
-        # single frame, or one that iterates over the whole video
-        self.running = False
+        # Loop control bits:
+        self.started = False # Has the thread been started or killed
+        self.running = False # Is the thread running for a whole video.
         # video is a parameter that holds the video capture device
         self.video = None
+        self.draw = True
+        # These are the input files
+        self._input_file = video
+        self.input_changed = False
+        # These are the options that are set by the parents and are passed to self.function
+        self._options = {}
+        self.options_changed = False
+        self._position = 0
+        self.position_changed = False
         # Various output files.
         self.csv_file = None
         self.vid_file = None
-        self.vid_in_file = video
-        self.video_frame = None
         # Result is the parameter than can be grabbed by other things when we
         # emit a signal on results_changed.
         # self.frame stores the raw frame.
-        #self.contours stores contours
+        # self.result stores the image with annotations
+        # self.contours stores contours
         self.result = None
         self.frame = None
         self.contours = None
-        # Options that must be defined by the parent widget.
-        self.options = {}
 
     def set_video(self, file_name):
-        """Sets the video property of this class"""
-        if file_name:
-            self.vid_in_file = file_name
-            self.video_changed.emit(file_name)
+        """Sets the input_file variable. This is mostly meant as a slot for signals"""
+        self.input_file = file_name
 
     def set_position(self, position: int):
         """Sets the video position. Used as a slot for signals from beyond"""
-        self.video_frame = position
+        self.position = position
 
-    def pause(self):
-        """Toggles pause on the thread"""
-        self.paused = not self.paused
+    def stop(self):
+        """Stops the loop from the start/stop bit"""
+        self.started = False
+
+    def draw_contours(self):
+        """Draw contours if self.draw is set
+
+        self.draw exists to make high polycount computations quicker, as then
+        the things won't have to be drawn if set to False.
+        """
+        if self.draw:
+            copy = self.frame.copy()
+            self.result = cv2.drawContours(copy, self.contours, -1, (0, 0, 255), 3)
+
+    def full_loop(self):
+        """Full loop.
+
+        This method starts the full loop, and exits once all frames have been processed
+        """
+        print('loop, reopen video')
+        self.video.close()
+        self.video = Video(self.input_file)
+        if self.csv_file:
+            print('Writing csv: {}'.format(self.csv_file))
+            connection = open(self.csv_file, 'w')
+            csv_writer = csv.DictWriter(connection, fieldnames=contours.FEATURES)
+            csv_writer.writeheader()
+        if self.vid_file:
+            print('Writing video: {}'.format(self.vid_file))
+            fourcc = cv2.VideoWriter_fourcc(*self.video.fourcc)
+            out = cv2.VideoWriter(self.vid_file, fourcc,
+                                  self.video.framerate, self.video.resolution)
+        for frame in self.video:
+            self.frame = frame
+            self.frame_changed.emit(self.video.position)
+            self.contours = self.function(frame, **self.options)
+            output = contours.extract_features(self.contours)
+            self.result = cv2.drawContours(frame, self.contours, -1, (0, 0, 255), 3)
+            self.draw_contours()
+            self.results_changed.emit(self.position)
+            # How many objects did we find, and current frame status
+            print('[{:>5}/{:>5}] {}'.format(self.video.position,
+                                            self.video.frames, len(output)))
+            # CSV output section
+            if self.csv_file:
+                for row in output:
+                    row.update({'timestamp': self.video.time, 'frame': self.video.position})
+                    csv_writer.writerow(row)
+            if self.vid_file:
+                out.write(self.result)
+            if not self.running:
+                break
+        if self.csv_file:
+            connection.close()
+        if self.vid_file:
+            out.release()
+        self.loop_complete.emit(True)
+
+    def single(self):
+        """Run to compute a single image"""
+        if self.position_changed or self.frame is None:
+            # If we changed the position, or have no self.frame, we get a frame.
+            self.computing.emit(True)
+            print('position changed')
+            self.video.position = self.position
+            self.frame = self.video.grab(self.position)
+            self.frame_changed.emit(self.video.position)
+            print('regrab complete')
+            self.computing.emit(False)
+        if self.options_changed or self.position_changed:
+            # Values have been changed, we will thus run this bit.
+            self.computing.emit(True)
+            print('options changed')
+            self.contours = self.function(self.frame, **self.options)
+            self.draw_contours()
+            self.results_changed.emit(self.position)
+            self.options_changed = False
+            self.computing.emit(False)
+            print('recompute complete')
+        if self.position_changed:
+            self.position_changed = False
+
+    def event_loop(self):
+        """The loop that the background thread goes through"""
+        while self.started:
+            # First we check for a change in videos.
+            # If the video was changed, a new video will be loaded.
+            if self.input_changed:
+                print('load new video')
+                if self.video is not None:
+                    self.video.close()
+                self.video = Video(self.input_file)
+                self.input_changed = False
+            # This is what will happen here: if the running flag has been set
+            # (i.e. by hitting the run button), the full loop will be exectued
+            # (run through all of the bits) If it hasn't been set, we will
+            # recompute the current image.
+            if self.running:
+                self.full_loop()
+            else:
+                self.single()
+            if not self.started:
+                # We can also break before the sleep.
+                break
+            self.msleep(100)
 
     def run(self):
-        """Methods"""
-        self.video = Video(self.vid_in_file)
-        if self.running:
-            print('loop')
-            if self.csv_file:
-                print('Writing csv: {}'.format(self.csv_file))
-                connection = open(self.csv_file, 'w')
-                csv_writer = csv.DictWriter(connection, fieldnames=contours.FEATURES)
-                csv_writer.writeheader()
-            if self.vid_file:
-                print('Writing video: {}'.format(self.vid_file))
-                fourcc = cv2.VideoWriter_fourcc(*self.video.fourcc)
-                out = cv2.VideoWriter(self.vid_file, fourcc,
-                                      self.video.framerate, self.video.resolution)
-            for frame in self.video:
-                self.frame = frame
-                self.frame_changed.emit(self.video.position)
-                self.contours = self.function(frame, **self.options)
-                output = contours.extract_features(self.contours)
-                print('[{:>5}/{:>5}] {}'.format(self.video.position,
-                                                self.video.frames, len(output)))
-                if self.csv_file:
-                    for row in output:
-                        row.update({'timestamp': self.video.time, 'frame': self.video.position})
-                        csv_writer.writerow(row)
-                self.result = cv2.drawContours(frame, self.contours, -1, (0, 0, 255), 3)
-                self.results_changed.emit(self.video_frame)
-                if self.vid_file:
-                    out.write(self.result)
-                if not self.running:
-                    break
-                if self.paused:
-                    self.msleep(100)
-            if self.csv_file:
-                connection.close()
-            if self.vid_file:
-                out.release()
-            self.loop_complete.emit(True)
-        else:
-            # Frame should hopefully stay the same.
-            print('hi, oneshot')
-            self.video.position = self.video_frame
-            print(self.video.position)
-            self.frame = self.video.grab(self.video_frame)
-            self.contours = self.function(self.frame, **self.options)
-            self.result = cv2.drawContours(self.frame, self.contours, -1, (0, 0, 255), 3)
-            self.results_changed.emit(self.video_frame)
+        """Running, loads the video and then calls self.event_loop()"""
+        self.started = True
+        if self.input_file is None:
+            raise ValueError('video file is not defined')
+        self.video = Video(self.input_file)
+        self.event_loop()
+        self.video.close()
 
     def function(self, *args, **kwargs):
         """Function that defines the segmentation"""

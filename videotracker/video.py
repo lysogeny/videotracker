@@ -115,6 +115,10 @@ class Video:
         self.position = 0
         self.stopped = False
 
+    def close(self):
+        """Closes the file connections"""
+        self.capture.release()
+
     def __iter__(self):
         return self
 

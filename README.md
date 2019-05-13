@@ -15,11 +15,6 @@ Feature list
     - [ ] MOG2 background subtractor segmentation
     - [ ] Optical flow tracking
     - [ ] Other methods?
-- [x] Display polygons
-- [x] Display other frames
-- [x] CSV output
-- [x] Video output
-- [x] Running tracking
 - [ ] Post-hoc connecting of tracked objects to form paths
 - [ ] Diagnostics plots
 - [ ] Packaging
@@ -33,16 +28,22 @@ Feature list
 - [x] Panning through videos
 - [x] Zoom in videos
 - [x] Some kind of a GUI
+- [x] Display polygons
+- [x] Display other frames
+- [x] CSV output
+- [x] Video output
+- [x] Running tracking
 - [ ] Batch mode
 
 Bugs
 ----
 
-- [ ] Single frame previews are slow
+- [ ] Some errors or exceptions in QThread methods cause a segmentation fault.
 - [ ] `video.frames` is wrong (mismatch in actual maximum frames and frames).
 - [ ] Output polygon colour is red while video polygon colour is blue
 - [ ] Spaghetti Bolognese signal infrastructure deserves cleanup.
 - [ ] Issues loading first couple of frames when first frame is no keyframe and not looping.
+- [x] Single frame previews are slow -> best they are going to be
 - [x] Preview checkbox does nothing
 - [x] After completion state is not reset to not running
 - [x] csv output is not automatically defined when defining input via cli
@@ -64,6 +65,13 @@ Minor features
 - [ ] Hypermodular segmentation modules: combine all of your favourite cv2 functions into a method.
 - [ ] CLI flag for loading options
 - [ ] Better keybinds
+
+
+New loop structure:
+
+QThread:
+ - Started with .start()
+ - enters loop
 
 
 Requirements
