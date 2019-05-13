@@ -508,6 +508,13 @@ class MainView(QMainWindow):
         for action in self.actions['&View']:
             action.setEnabled(value)
         self.dock.go_button.setEnabled(value)
+        if value:
+            self.options.values_changed.connect(self.recompute_image)
+        else:
+            try:
+                self.options.values_changed.disconnect()
+            except TypeError:
+                pass
 
     @property
     def image_control(self) -> bool:
@@ -564,7 +571,6 @@ class MainView(QMainWindow):
         self.statusbar.showMessage('Ready')
         # Dock
         self.options = segmentations.ThresholdSegmentation()
-        self.options.values_changed.connect(self.recompute_image)
         self.options.results_changed.connect(self.draw_contours)
         #self.options.thread.finished.connect(lambda: setattr(self, 'running', False))
         self.options.thread.loop_complete.connect(lambda: setattr(self, 'running', False))
