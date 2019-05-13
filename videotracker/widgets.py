@@ -432,6 +432,7 @@ class SideDock(QDockWidget):
         self.preview_cbox = QCheckBox('Preview', statusTip='Show video during computation',
                                       stateChanged=lambda x: setattr(self, 'checked', bool(x)))
         self.go_button = QPushButton('Go', maximumWidth=50, clicked=self.emit_go, enabled=False)
+        self.preview_cbox.stateChanged.connect(lambda x: setattr(self.custom.thread, 'draw', bool(x)))
         # Grid layout
         inner_grid = QGridLayout()
         inner_grid.addWidget(self.csv_cbox, 0, 0)
@@ -593,7 +594,7 @@ class MainView(QMainWindow):
     def recompute_image(self):
         """Recomputes the image"""
         if self.dock.preview and not self.running:
-            self.compute_image(index=self.options.thread.video_frame)
+            self.compute_image(index=self.options.thread.position)
 
     def compute_image(self, index=None):
         """Computes the image using the function from self.options"""
