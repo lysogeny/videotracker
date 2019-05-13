@@ -135,10 +135,6 @@ class SegmentationThread(QThread):
         """Toggles pause on the thread"""
         self.paused = not self.paused
 
-    def render(self):
-        """Renders polygons on the image frame"""
-        frame = self.frame.copy()
-
     def run(self):
         """Methods"""
         self.video = Video(self.vid_in_file)
@@ -152,7 +148,8 @@ class SegmentationThread(QThread):
             if self.vid_file:
                 print('Writing video: {}'.format(self.vid_file))
                 fourcc = cv2.VideoWriter_fourcc(*self.video.fourcc)
-                out = cv2.VideoWriter(self.vid_file, fourcc, self.video.framerate, self.video.resolution)
+                out = cv2.VideoWriter(self.vid_file, fourcc,
+                                      self.video.framerate, self.video.resolution)
             for frame in self.video:
                 self.frame = frame
                 self.frame_changed.emit(self.video.position)
@@ -164,7 +161,6 @@ class SegmentationThread(QThread):
                     for row in output:
                         row.update({'timestamp': self.video.time, 'frame': self.video.position})
                         csv_writer.writerow(row)
-                #self.render()
                 self.result = cv2.drawContours(frame, self.contours, -1, (0, 0, 255), 3)
                 self.results_changed.emit(self.video_frame)
                 if self.vid_file:

@@ -20,7 +20,7 @@ Feature list
 - [x] CSV output
 - [x] Video output
 - [x] Running tracking
-- [ ] Connecting tracked objects to form paths
+- [ ] Post-hoc connecting of tracked objects to form paths
 - [ ] Diagnostics plots
 - [ ] Packaging
     - [ ] Windows
@@ -43,7 +43,6 @@ Bugs
 - [ ] Output polygon colour is red while video polygon colour is blue
 - [ ] Spaghetti Bolognese signal infrastructure deserves cleanup.
 - [ ] Issues loading first couple of frames when first frame is no keyframe and not looping.
-- [ ] option load value is not set to same folder by defaul
 - [x] Preview checkbox does nothing
 - [x] After completion state is not reset to not running
 - [x] csv output is not automatically defined when defining input via cli
@@ -61,7 +60,7 @@ Minor features
 --------------
 
 - [x] KeyboardInterrupt 
-- [ ] Colour choices for output polygon tracking thing
+- [ ] Colour choices for output polygon tracking thing.
 - [ ] Hypermodular segmentation modules: combine all of your favourite cv2 functions into a method.
 - [ ] CLI flag for loading options
 - [ ] Better keybinds
