@@ -34,6 +34,9 @@ Feature list
 - [x] Video output
 - [x] Running tracking
 - [ ] Batch mode
+- [ ] rewrite event loop as async?
+- [ ] loading a different module.
+
 
 Bugs
 ----
@@ -69,13 +72,6 @@ Minor features
 - [ ] Hypermodular segmentation modules: combine all of your favourite cv2 functions into a method.
 - [ ] CLI flag for loading options
 - [ ] Better keybinds
-
-
-New loop structure:
-
-QThread:
- - Started with .start()
- - enters loop
 
 
 Requirements
