@@ -8,7 +8,7 @@ from PyQt5.QtWidgets import (QWidget, QMainWindow, QAction, #QMessageBox,
                              QFileDialog, qApp, QCheckBox, QPushButton,
                              QGridLayout, QDockWidget, QVBoxLayout, QBoxLayout,
                              QLabel, QSizePolicy, QScrollArea, QSlider,
-                             QHBoxLayout, QSpinBox, QMessageBox)
+                             QHBoxLayout, QSpinBox, QColorDialog)
 from PyQt5.QtGui import QIcon, QPalette, QImage, QPixmap
 from PyQt5.QtCore import Qt, pyqtSignal
 
@@ -18,22 +18,33 @@ from . import segmentations
 from . import helpers
 from .video import Video
 
-class BaseWidget(QWidget):
-    """An abstract widget"""
-    def __init__(self, *args, **kwargs):
-        super().__init__(self, *args, **kwargs)
-        self.create_widgets()
-        self.create_actions()
-        self.handle_widgets()
-        self.handle_actions()
+class ColourButton(QPushButton):
+    """A button, that when pushed, returns a colour"""
 
-    def create_gui(self):
-        """Method for creating gui elements. self.layout, other things"""
-        raise NotImplementedError
+    valueChanged = pyqtSignal(str)
 
-    def create_actions(self):
-        """Method for creating this widget's associated actions."""
-        raise NotImplementedError
+    def  __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.setValue('#000000')
+        self.dialog = QColorDialog()
+        self.clicked.connect(self.pick_colour)
+
+    def setValue(self, value: str = None):
+        # pylint: disable=invalid-name
+        # I can't fix qt5's stupid naming scheme
+        """The value's setter. see value"""
+        self._value = value
+        self.setText(value)
+        self.setStyleSheet('QPushButton {color: %s;}' % value)
+        self.valueChanged.emit(value)
+
+    def value(self):
+        """The value of the widget"""
+        return self._value
+
+    def pick_colour(self):
+        """Pick the colour using the dialog"""
+        self.setValue(self.dialog.getColor().name())
 
 class ImageView(QWidget):
     """The view area.
@@ -225,6 +236,59 @@ class ImageView(QWidget):
         should_height = self.scrollarea.height()
         self.scale = min(should_width/current_width * self.scale,
                          should_height/current_height * self.scale)
+
+class SideBar(QDockWidget):
+    """A sidebar widget abstraction"""
+
+    image_changed = pyqtSignal(bool)
+    values_changed = pyqtSignal(dict)
+
+    @property
+    def image(self):
+        """The view image provided by this side bar"""
+        return self.functions.images['selected']
+
+    @property
+    def csv(self) -> str:
+        """The csv value property
+
+        If none: box is not checked, if string, box is checked and string is the csv value
+        """
+        if self.widgets['csv'].status():
+            ret = self.widgets['csv_button'].value()
+        else:
+            ret = None
+        return ret
+    @csv.setter
+    def csv(self, value: str):
+        self.values['csv'] = value
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.create_gui()
+
+    def create_gui(self):
+        """Creates the ui of this dock widget"""
+        dynamic_widgets = self.function.widget # Some form of widget list or something.
+        static_widgets = {
+            'load_values': QPushButton('Load...'),
+            'save_values': QPushButton('Save...'),
+            'csv': QCheckBox(),
+            'vid': QCheckBox(),
+            'csv_file': QPushButton(),
+            'vid_file': QPushButton(),
+        }
+        super_layout = QVBoxLayout()
+
+
+class AdaptiveThresholdDock(SideBar):
+    """Adaptive Threshold"""
+    functions = [
+        blur, 
+        something, 
+        somethingelse, 
+        draw
+    ]
 
 class SideDock(QDockWidget):
     """Sidebar dock area
@@ -456,259 +520,3 @@ class SideDock(QDockWidget):
         widget = QWidget()
         widget.setLayout(layout)
         self.setWidget(widget)
-
-class MainView(QMainWindow):
-    """A main view
-
-    This main view has four principal states consisting of a combination of
-    running and loaded.
-    These states define which GUI elements are enabled at which given timepoint.
-
-    This widget unites a ImageView and SideDock widget
-    """
-    # Is 8/7 instance attributes really too many? Considering that this is a
-    # main window, that is impressively low.
-    # pylint: disable=too-many-instance-attributes
-
-    TITLE = 'pyqt-stuff'
-    actions = {}
-
-    @property
-    def running(self) -> bool:
-        """Running state of the main window"""
-        return self.state['running']
-    @running.setter
-    def running(self, value: bool):
-        # set internal variable
-        self.state['running'] = value
-        # Disable framecontrol actions
-        for action in self.actions['&View'][5:9]:
-            action.setEnabled(not value)
-        self.actions['&File'][0].setEnabled(not value)
-        start_action = self.actions['&View'][4]
-        if value:
-            start_action.setIcon(QIcon.fromTheme('media-playback-stop'))
-            start_action.setText('Stop')
-        else:
-            start_action.setIcon(QIcon.fromTheme('media-playback-start'))
-            start_action.setText('Start')
-        # Disable option controls
-        self.dock.running = value
-        # Set mode of subsidiary elements
-        # Set the frame control to be handled by the sidebar, allowing it to
-        # step to the next frames.
-        self.image_control = not value
-        self.options.thread.running = value
-
-    @property
-    def loaded(self) -> bool:
-        """Has a video been loaded?"""
-        return self.state['loaded']
-    @loaded.setter
-    def loaded(self, value: bool):
-        self.state['loaded'] = value
-        for action in self.actions['&View']:
-            action.setEnabled(value)
-        self.dock.go_button.setEnabled(value)
-        if value:
-            self.options.values_changed.connect(self.options.thread.set_options)
-            self.options.thread.start()
-        else:
-            helpers.disconnect(self.options.values_changed)
-            self.options.thread.stop()
-
-    @property
-    def image_control(self) -> bool:
-        """Is the ImageView controlling the frames?
-
-        True: frames controlled by imageview (self.image)
-        False: frames controlled by self.options.thread
-        """
-        return self.state['image_control']
-    @image_control.setter
-    def image_control(self, value: bool):
-        self.state['image_control'] = value
-        # Reconnect signals
-        helpers.disconnect(self.options.thread.frame_changed)
-        helpers.disconnect(self.image.pos_changed)
-        if value:
-            self.image.pos_changed.connect(self.compute_image)
-        else:
-            self.options.thread.frame_changed.connect(self.image.set_position)
-        self.image.enabled = value
-
-    def __init__(self, csv=None, vid=None, in_vid=None):
-        super().__init__()
-        self.state = {
-            'running': False,
-            'loaded': False,
-            'image_control': False
-        }
-        self.create_gui()
-        self.create_actions()
-        self.setWindowTitle(self.TITLE)
-        self.capture = None
-        self.running = False
-        self.loaded = False
-        # Actions based on arguments
-        self.video_file = in_vid
-        if self.video_file:
-            self.video_load()
-        self.dock.csv = csv is not None
-        self.dock.vid = vid is not None
-
-    def change_cursor(self, value: bool):
-        """Changes cursor for the app. When true changes to hourglass, when false to normal"""
-        if value:
-            qApp.setOverrideCursor(Qt.WaitCursor)
-        else:
-            qApp.restoreOverrideCursor()
-
-    def create_gui(self):
-        """Creates the GUI"""
-        # Bars
-        self.toolbar = self.addToolBar('View')
-        self.menubar = self.menuBar()
-        self.statusbar = self.statusBar()
-        self.statusbar.showMessage('Ready')
-        # Dock
-        self.options = segmentations.ThresholdSegmentation()
-        self.options.results_changed.connect(self.draw_contours)
-        #self.options.thread.finished.connect(lambda: setattr(self, 'running', False))
-        self.options.thread.loop_complete.connect(lambda: setattr(self, 'running', False))
-        self.options.thread.computing.connect(self.change_cursor)
-        self.dock = SideDock(self.options)
-        self.dock.preview_cbox.stateChanged.connect(self.recompute_image)
-        self.addDockWidget(Qt.LeftDockWidgetArea, self.dock)
-        self.dock.started.connect(lambda x: setattr(self, 'running', x))
-        # Image
-        self.image = ImageView()
-        self.setCentralWidget(self.image)
-        self.resize(800, 500)
-
-    def draw_contours(self):
-        """Draw contours onto the image device"""
-        if self.dock.preview:
-            self.image.image = self.options.thread.result
-
-    def recompute_image(self):
-        """Recomputes the image"""
-        if self.dock.preview and not self.running:
-            self.compute_image(index=self.options.thread.position)
-
-    def compute_image(self, index=None):
-        """Computes the image using the function from self.options"""
-        self.options.thread.set_position(index)
-
-    def create_actions(self):
-        """Creates all actions"""
-        # pylint: disable=no-self-use
-        # No clue why pylint thinks that this could be a function while it is
-        # clearly an abstracted method.
-        self.actions = {
-            '&File': [
-                QAction(QIcon.fromTheme('document-open'), 'Open...',
-                        statusTip='Opens a new file',
-                        triggered=self.video_pick)
-            ],
-            '&View': [
-                QAction(QIcon.fromTheme('zoom-in'), 'Zoom in',
-                        statusTip='Increases scale',
-                        triggered=self.image.zoom_in,
-                        shortcut='PgDown',
-                        enabled=False),
-                QAction(QIcon.fromTheme('zoom-out'), 'Zoom out',
-                        statusTip='Decreases scale',
-                        triggered=self.image.zoom_out,
-                        shortcut='PgUp',
-                        enabled=False),
-                QAction(QIcon.fromTheme('zoom-original'), 'Zoom normal',
-                        statusTip='Sets scale to 1.0',
-                        triggered=lambda: setattr(self.image, 'scale', 1.0),
-                        shortcut='Ctrl+1',
-                        enabled=False),
-                QAction(QIcon.fromTheme('zoom-fit-best'), 'Zoom optimal',
-                        statusTip='Sets scale to 1.0',
-                        triggered=self.image.zoom_optimal,
-                        shortcut='Ctrl+2',
-                        enabled=False),
-                QAction(QIcon.fromTheme('media-playback-start'), 'Start segmentation',
-                        statusTip='Segmentation is started',
-                        shortcut='Space', enabled=False,
-                        triggered=lambda: setattr(self, 'running', not self.running)),
-                QAction(QIcon.fromTheme('go-first'), 'Goto first frame',
-                        statusTip='Goes to the first frame',
-                        triggered=lambda: setattr(self.image, 'pos', 0),
-                        shortcut='[',
-                        enabled=False),
-                QAction(QIcon.fromTheme('go-previous'), 'Goto previous frame',
-                        statusTip='Goes to the previous frame',
-                        triggered=lambda: setattr(self.image, 'pos', self.image.pos-1),
-                        shortcut=',',
-                        enabled=False),
-                QAction(QIcon.fromTheme('go-next'), 'Goto next frame',
-                        statusTip='Goes to the next frame',
-                        triggered=lambda: setattr(self.image, 'pos', self.image.pos+1),
-                        shortcut='.',
-                        enabled=False),
-                QAction(QIcon.fromTheme('go-last'), 'Goto last frame',
-                        statusTip='Goes to the last frame',
-                        triggered=lambda: setattr(self.image, 'pos', self.image.pos_max),
-                        shortcut=']',
-                        enabled=False),
-                QAction('Show toolbar',
-                        checkable=True,
-                        checked=True,
-                        statusTip='Visibility of the toolbar',
-                        triggered=self.toolbar.setVisible)
-            ],
-            '&Help': [
-                QAction(QIcon.fromTheme('help-about'), 'About Qt',
-                        statusTip='Help, I am stuck in a GUI factory',
-                        triggered=qApp.aboutQt)
-            ]
-        }
-        for menu in self.actions:
-            this_menu = self.menubar.addMenu(menu)
-            for action in self.actions[menu]:
-                this_menu.addAction(action)
-                # Only add actions where I added an icon and which aren't in
-                # the help menu.
-                if menu not in ('&Help') and not action.icon().isNull():
-                    self.toolbar.addAction(action)
-
-    def video_pick(self):
-        """Spawn a video picking dialog"""
-        file_name = QFileDialog.getOpenFileName(self, 'Open file', self.video_file)
-        if file_name[0]:
-            self.video_file = file_name[0]
-            self.video_load()
-
-    def video_load(self, video_file=None):
-        """Loads a video file"""
-        if video_file:
-            self.video_file = video_file
-        # we temporarily create a video object to determine the max frames count.
-        video_tmp = Video(self.video_file)
-        # Get the maximum amount of frames in this video. Because OpenCV is a
-        # bit idiotic, we have to do this slightly strangely.  The property you
-        # use to get the maximum frames in opencv is a bit buggy and only works
-        # sometimes. Other options include iterating over everything, but that
-        # is quite slow as well.  Thus here we set the position to the end of
-        # the file and then read out the position in frames that we are at.
-        # We then have to subtract one, I have no idea why though, but otherwise it crashes.
-        self.loaded = False
-        self.image.reset()
-        video_tmp.capture.set(cv2.CAP_PROP_POS_AVI_RATIO, 1.0)
-        self.image.pos_max = int(video_tmp.capture.get(cv2.CAP_PROP_POS_FRAMES)) - 1
-        video_tmp.close()
-        del video_tmp
-        self.options.thread.input_file = self.video_file
-        self.options.thread.options = self.options.values
-        # Set image of imageviewer, new maximum position
-        file_tokenised = os.path.splitext(self.video_file)
-        self.dock.csv_file = file_tokenised[0] + '_output' + '.csv'
-        self.dock.vid_file = file_tokenised[0] + '_output' + file_tokenised[1]
-        self.loaded = True
-        self.setWindowTitle(self.TITLE + ' ' + self.video_file)
-        self.statusbar.showMessage('Loaded file {}'.format(self.video_file))

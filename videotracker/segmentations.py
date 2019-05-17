@@ -7,18 +7,18 @@ from types import MethodType
 from pprint import pprint
 
 from typing import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
-from PyQt5.QtWidgets import (QWidget, QSpinBox, QPushButton,
+from PyQt5.QtWidgets import (QWidget, QSpinBox, QPushButton, QGroupBox, QVBoxLayout,
                              QComboBox, QFileDialog, QGridLayout, QLabel,
-                             QDoubleSpinBox)
-
+                             QDoubleSpinBox, QColorDialog)
 from PyQt5.QtCore import QThread, pyqtSignal
 
 import cv2
 
 from .video import Video
 from . import contours
+from .widgets import ColourButton 
 
 @dataclass
 class BaseParam:
@@ -49,7 +49,7 @@ class IntParam(BaseParam):
     singleStep: int = 1
 
 @dataclass
-class FloatParam:
+class FloatParam(BaseParam):
     """Integer Parameter"""
     widget_callable: Callable = QDoubleSpinBox
     label: str = ''
@@ -58,8 +58,14 @@ class FloatParam:
     singleStep: float = 1
 
 @dataclass
-class ChoiceParam:
+class ColorParam(BaseParam):
+    widget_callable: Callable = ColourButton
+    label: str = 'Colour'
+
+@dataclass
+class ChoiceParam(BaseParam):
     """Choice Parameter"""
+    widget_callable: Callable = QComboBox
     label: str = ''
     choices: tuple = tuple()
     labels: tuple = tuple()
@@ -74,11 +80,64 @@ class ChoiceParam:
         # setValue for QComboBox
         def set_data(self, data=None):
             """Method for setting the data of the QComboBox"""
-            print(self)
             self.setCurrentIndex(self.findData(data))
         widget.setValue = MethodType(set_data, widget)
         widget.value = widget.currentData
         return dictionary
+
+class DisplayWorkerThread(QThread):
+    """A thread for continuously updated displays"""
+
+    def __init__(self, method, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Property variables
+        self.function = method()
+        self.position = 0 # Position in the video
+        self.options = {'input': None, 'output':None}
+        # Other variables
+        self.frame = {} # A dict of values and frames that are the results of the various steps.
+        self.view = None # The frame that is displayed by external guys
+        self.video = None # The video object
+
+    def compute(self, options: dict = None, frame: int = None):
+        """Compute the image for frame frame"""
+        if not self.frame['input']:
+            self.video.position = frame
+            self.frame['input'] = self.video.frame
+        self.frame 
+        if frame:
+            self.frame['input'] = self.video
+
+    def loop(self):
+        """Loop for updated images"""
+        last_position = -1
+        last_options = {}
+        while self.running:
+            position_changed = last_position != self.position
+            options_changed = last_options != self.options
+            if position_changed:
+                # Requested position has changed, we grab the new image
+                if self.position - last_position < 16:
+                    # if the new position is close and in the future, this is very quick
+                    while self.video.position != self.position:
+                        self.frame['input'] = next(self.video)
+                else:
+                    # Use this for other position changes.
+                    self.video.position = self.position
+                    self.frame['input'] = self.video.frame
+            if options_changed or position_changed:
+                self.compute()
+            position_changed, options_changed = False, False
+            last_position, last_options = self.position, self.options
+            self.usleep(100)
+
+    def run(self):
+        """Creates a video object and enters the loop"""
+        self.video = Video(self.input_file)
+        self.exec_()
+
+class RunningWorkerThread(QThread):
+    """A worker thread for running the segmentation"""
 
 class SegmentationThread(QThread):
     """A thread for segmentations
@@ -412,8 +471,9 @@ class ThresholdSegmentation(BaseSegmentation):
         'kernel_size': IntParam(singleStep=2, minimum=1, maximum=100, label='Kernel Size'),
         'min_size': IntParam(singleStep=1, maximum=1000, label='Minimum Size'),
         'max_size': IntParam(singleStep=1, maximum=1000, value=1000, label='Maximum Size'),
+        'colour': ColorParam(),
     }
-    def function(self, img, thresh_type, blur, size, c_value, kernel_size, min_size, max_size):
+    def function(self, img, thresh_type, blur, size, c_value, kernel_size, min_size, max_size, colour):
         """Adaptive threshold segmentation of image
 
         Takes an image img
@@ -434,3 +494,162 @@ class ThresholdSegmentation(BaseSegmentation):
         contours = [contour for contour in contours
                     if min_size < cv2.contourArea(contour) < max_size]
         return contours
+
+
+dependency_graph = {
+    'blur': ['input'],
+    'adap_thresh': ['blur'],
+    'contours': ['adap_thresh'],
+    'result': ['contours', 'input'],
+}
+
+class BaseFunction:
+    """Abstract function"""
+    title: str
+    inputs: dict
+    function: Callable
+
+    def widget(self):
+        """Creates the widget of this function"""
+        layout = QGridLayout()
+        self.widgets = {
+            param: self.inputs[param].widget() for param in self.inputs
+        }
+        for row, param in enumerate(self.widgets):
+            print(self.widgets)
+            sub_widget = self.widgets[param]
+            layout.addWidget(sub_widget['widget'], row, 0)
+            layout.addWidget(sub_widget['label'], row, 1)
+        widget = QGroupBox(self.title)
+        widget.setLayout(layout)
+        return widget
+
+    @property
+    def values(self) -> dict:
+        return {
+            param: self.widgets[param]['widget'].value()
+            for param in self.widgets
+        }
+
+    def fun(self):
+        """Returns a function"""
+        return self.function
+
+class GetFrame(BaseFunction):
+    """Provides frame"""
+
+class GaussianBlur(BaseFunction):
+    """Blurs Gauss"""
+    title = 'Gaussian Blur'
+    inputs = {
+        'size': IntParam(minimum=1, maximum=100, singleStep=2, label='Size'),
+    }
+    function = lambda x, size: cv2.GaussianBlur(x, (size, size), 0)
+
+class AdaptiveThreshold(BaseFunction):
+    """Computes an adaptive Threshold"""
+    title = 'Adaptive Threshold' 
+    inputs = {
+        'blockSize': IntParam(singleStep=2, minimum=3, maximum=100, label='Block Size'),
+        'C': IntParam(singleStep=1, minimum=-100, maximum=100, label='C Value'),
+        'thresholdType': ChoiceParam(
+            choices=(cv2.ADAPTIVE_THRESH_MEAN_C, cv2.ADAPTIVE_THRESH_GAUSSIAN_C),
+            labels=('Mean', 'Gaussian'),
+            label='Threshold Type',
+        ),
+    }
+    function = lambda x, options: cv2.adaptiveThreshold(x, maxValue=255,
+                                                        adaptiveMethod=cv2.THRESH_BINARY_INV,
+                                                        **options)
+
+class Contours(BaseFunction):
+    """Extracts contours"""
+    title: str = 'Extract Contours'
+    inputs: dict = {
+        'mode': ChoiceParam(
+            choices=(cv2.RETR_EXTERNAL, cv2.RETR_LIST, cv2.RETR_CCOMP, cv2.RETR_TREE),
+            labels=('External Contours', 'All Contours', '??', 'Full Tree'),
+            label='Retrieval Mode',
+        ),
+        'method': ChoiceParam(
+            choices=(cv2.CHAIN_APPROX_NONE, cv2.CHAIN_APPROX_SIMPLE, cv2.CHAIN_APPROX_TC89_L1, cv2.CHAIN_APPROX_TC89_KCOS),
+            labels=('All contour points', 'Compress segments', 'Teh-Chin approximation L1', 'Teh-Chin approximation KCOS'),
+            label='Method',
+        ),
+    }
+    function: Callable = cv2.findContours
+
+class SizeFilter(BaseFunction):
+    """Provides a method for size filters"""
+    title: str = 'Filter by area'
+    inputs: dict = {
+        'minimum': IntParam(singleStep=1, maximum=1000, label='Minimum Size'),
+        'maximum': IntParam(singleStep=1, maximum=1000, value=1000, label='Maximum Size'),
+    }
+    function: Callable = lambda x, minimum, maximum: [i for i in x
+                                                      if minimum <= cv2.contourArea(i) <= maximum]
+
+class DrawContours(BaseFunction):
+    """Draws Contours"""
+    title: str = 'Draw Contours'
+    inputs: dict = {
+        'color': ColorParam(),
+        'thickness': IntParam(minimum=1, maximum=100, label='Thickness')
+    }
+    function: Callable = cv2.drawContours
+
+
+class Stack:
+    """A function stack for adaptive thresholds"""
+    functions = {
+        'gaussian_blur': GaussianBlur,
+        'adaptive_threshold': AdaptiveThreshold,
+        'contour_extract': Contours,
+        'size_filter': SizeFilter,
+        'draw_contours': DrawContours,
+    }
+
+    def create_widget(self):
+        """Creates the widget of this method stack"""
+        layout = QVBoxLayout()
+        self.widgets = {
+            function: self.functions[function]().widget() for function in self.functions
+        }
+        for widget in self.widgets:
+            layout.addWidget(self.widgets[widget])
+        widget = QWidget()
+        widget.setLayout(layout)
+        self._widget = widget
+
+    @property
+    def widget(self):
+        """Returns a widget. If no self.widget exists, creates a widget"""
+        self.create_widget()
+        return self._widget
+
+    @property
+    def values(self) -> dict:
+        return {
+            function: self.widgets[function].values
+            for function in self.widgets
+        }
+        # I want something like this:
+        values = {
+            'gaussian_blur': {
+                'size': 1,
+            },
+            'adaptive_threshold': {
+                'blockSize': 3,
+                'C': 5,
+                'thresholdType': 1
+            },
+        }
+
+
+nodes = {
+        'input': GetFrame,
+        'blur': GaussianBlur,
+        'adap_thresh': AdaptiveThreshold,
+        'contours': Contours,
+        'Result': DrawContours,
+}
