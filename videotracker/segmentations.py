@@ -3,84 +3,69 @@
 import json
 import csv
 
-from types import MethodType
-from pprint import pprint
-
-from typing import Callable
-from dataclasses import dataclass
-
-from PyQt5.QtWidgets import (QWidget, QSpinBox, QPushButton,
-                             QComboBox, QFileDialog, QGridLayout, QLabel,
-                             QDoubleSpinBox)
-
-from PyQt5.QtCore import QThread, pyqtSignal
+from PyQt5 import QtWidgets, QtCore
 
 import cv2
 
 from .video import Video
 from . import contours
+from . import functions
 
-@dataclass
-class BaseParam:
-    """Parameter base"""
-    label: str = ''
-    widget_callable: Callable = QWidget
+class DisplayWorkerThread(QtCore.QThread):
+    """A thread for continuously updated displays"""
 
-    def widget(self):
-        """Returns a widget  dictionary: A dict with 'label' and 'widget'"""
-        members = self.__dict__
-        construct = {
-            member: members[member] for member in members
-            if not member.startswith('__')
-            and member not in ('label', 'widget_callable')
-        }
-        return {
-            'widget': self.widget_callable(**construct),
-            'label': QLabel(self.label),
-        }
+    def __init__(self, method, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Property variables
+        self.function = method()
+        self.position = 0 # Position in the video
+        self.options = {'input': None, 'output':None}
+        # Other variables
+        self.frame = {} # A dict of values and frames that are the results of the various steps.
+        self.view = None # The frame that is displayed by external guys
+        self.video = None # The video object
 
-@dataclass
-class IntParam(BaseParam):
-    """Integer Parameter"""
-    widget_callable: Callable = QSpinBox
-    minimum: int = 0
-    maximum: int = 100
-    value: int = minimum
-    singleStep: int = 1
+    def compute(self, options: dict = None, frame: int = None):
+        """Compute the image for frame frame"""
+        if not self.frame['input']:
+            self.video.position = frame
+            self.frame['input'] = self.video.frame
+        self.frame
+        if frame:
+            self.frame['input'] = self.video
 
-@dataclass
-class FloatParam:
-    """Integer Parameter"""
-    widget_callable: Callable = QDoubleSpinBox
-    label: str = ''
-    minimum: float = 0
-    maximum: float = 100
-    singleStep: float = 1
+    def loop(self):
+        """Loop for updated images"""
+        last_position = -1
+        last_options = {}
+        while self.running:
+            position_changed = last_position != self.position
+            options_changed = last_options != self.options
+            if position_changed:
+                # Requested position has changed, we grab the new image
+                if self.position - last_position < 16:
+                    # if the new position is close and in the future, this is very quick
+                    while self.video.position != self.position:
+                        self.frame['input'] = next(self.video)
+                else:
+                    # Use this for other position changes.
+                    self.video.position = self.position
+                    self.frame['input'] = self.video.frame
+            if options_changed or position_changed:
+                self.compute()
+            position_changed, options_changed = False, False
+            last_position, last_options = self.position, self.options
+            self.usleep(100)
 
-@dataclass
-class ChoiceParam:
-    """Choice Parameter"""
-    label: str = ''
-    choices: tuple = tuple()
-    labels: tuple = tuple()
+    def run(self):
+        """Creates a video object and enters the loop"""
+        self.video = Video(self.input_file)
+        self.exec_()
 
-    def widget(self):
-        """Creates a widget dictionary"""
-        dictionary = {'label': QLabel(self.label)}
-        widget = dictionary['widget'] = QComboBox()
-        for label, choice in zip(self.labels, self.choices):
-            widget.addItem(label, choice)
-        widget.valueChanged = widget.currentIndexChanged
-        # setValue for QComboBox
-        def set_data(self, data=None):
-            """Method for setting the data of the QComboBox"""
-            print(self)
-            self.setCurrentIndex(self.findData(data))
-        widget.setValue = MethodType(set_data, widget)
-        widget.value = widget.currentData
-        return dictionary
+class RunningWorkerThread(QtCore.QThread):
+    """A worker thread for running the segmentation"""
 
-class SegmentationThread(QThread):
+class SegmentationThread(QtCore.QThread):
     """A thread for segmentations
 
     This also contains the Video.
@@ -88,12 +73,12 @@ class SegmentationThread(QThread):
     # Apparently Qt5 does not like you mixing QThread with QWidget.
 
     # Signal emitted when a new frame is loaded
-    frame_changed = pyqtSignal(int)
+    frame_changed = QtCore.pyqtSignal(int)
     # Signal emitted when a new result was computed
-    results_changed = pyqtSignal(int)
+    results_changed = QtCore.pyqtSignal(int)
     # Signal to indicate that the loop has run out of frames.
-    loop_complete = pyqtSignal(bool)
-    computing = pyqtSignal(bool)
+    loop_complete = QtCore.pyqtSignal(bool)
+    computing = QtCore.pyqtSignal(bool)
 
     @property
     def options(self) -> dict:
@@ -292,16 +277,16 @@ class SegmentationThread(QThread):
         """Function that defines the segmentation"""
         raise NotImplementedError
 
-class BaseSegmentation(QWidget):
+class BaseSegmentation(QtCore.QWidget):
     #pylint: disable=abstract-method
     # This class is also abstract
     """Abstract segmentation"""
 
     params = {}
 
-    values_changed = pyqtSignal(dict)
-    frame_changed = pyqtSignal(int)
-    results_changed = pyqtSignal(int)
+    values_changed = QtCore.pyqtSignal(dict)
+    frame_changed = QtCore.pyqtSignal(int)
+    results_changed = QtCore.pyqtSignal(int)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -329,14 +314,14 @@ class BaseSegmentation(QWidget):
 
     def create_gui(self):
         """Creates main gui elements"""
-        self.layout = QGridLayout()
+        self.layout = QtWidgets.QGridLayout()
         self.setLayout(self.layout)
         for row, widget in enumerate(self.widgets):
             self.layout.addWidget(self.widgets[widget]['widget'], row, 0)
             self.layout.addWidget(self.widgets[widget]['label'], row, 1)
-        self.load_button = QPushButton('Load...', pressed=self.load_values)
+        self.load_button = QtWidgets.QPushButton('Load...', pressed=self.load_values)
         self.layout.addWidget(self.load_button)
-        self.layout.addWidget(QPushButton('Save...', pressed=self.save_values))
+        self.layout.addWidget(QtWidgets.QPushButton('Save...', pressed=self.save_values))
         for widget in self.widgets:
             self.widgets[widget]['widget'].valueChanged.connect(self.emit_values)
 
@@ -386,14 +371,14 @@ class BaseSegmentation(QWidget):
 
     def load_values(self):
         """Spawns a file picker dialog to load values"""
-        file_name = QFileDialog.getOpenFileName(self, 'Load values', self.value_file, '*.json')
+        file_name = QtWidgets.QFileDialog.getOpenFileName(self, 'Load values', self.value_file, '*.json')
         if file_name[0]:
             self.value_file = file_name[0]
             self.load(file_name[0])
 
     def save_values(self):
         """Spawns a file picker dialog to save values"""
-        file_name = QFileDialog.getSaveFileName(self, 'Save values', self.value_file, '*.json')
+        file_name = QtWidgets.QFileDialog.getSaveFileName(self, 'Save values', self.value_file, '*.json')
         if file_name[0]:
             self.value_file = file_name[0]
             self.save(file_name[0])
@@ -401,19 +386,19 @@ class BaseSegmentation(QWidget):
 class ThresholdSegmentation(BaseSegmentation):
     """Sample segmentation"""
     params = {
-        'blur': IntParam(singleStep=2, minimum=1, maximum=100, label='Blur'),
-        'thresh_type': ChoiceParam(
+        'blur': functions.IntParam(singleStep=2, minimum=1, maximum=100, label='Blur'),
+        'thresh_type': functions.ChoiceParam(
             choices=(cv2.ADAPTIVE_THRESH_MEAN_C, cv2.ADAPTIVE_THRESH_GAUSSIAN_C),
             labels=('Mean', 'Gaussian'),
             label='Threshold Type',
         ),
-        'size': IntParam(singleStep=2, minimum=3, maximum=100, label='Block Size'),
-        'c_value': IntParam(singleStep=1, minimum=-100, maximum=100, label='C Value'),
-        'kernel_size': IntParam(singleStep=2, minimum=1, maximum=100, label='Kernel Size'),
-        'min_size': IntParam(singleStep=1, maximum=1000, label='Minimum Size'),
-        'max_size': IntParam(singleStep=1, maximum=1000, value=1000, label='Maximum Size'),
+        'size': functions.IntParam(singleStep=2, minimum=3, maximum=100, label='Block Size'),
+        'c_value': functions.IntParam(singleStep=1, minimum=-100, maximum=100, label='C Value'),
+        'kernel_size': functions.IntParam(singleStep=2, minimum=1, maximum=100, label='Kernel Size'),
+        'min_size': functions.IntParam(singleStep=1, maximum=1000, label='Minimum Size'),
+        'max_size': functions.IntParam(singleStep=1, maximum=1000, value=1000, label='Maximum Size'),
     }
-    def function(self, img, thresh_type, blur, size, c_value, kernel_size, min_size, max_size):
+    def function(self, img, thresh_type, blur, size, c_value, kernel_size, min_size, max_size, colour):
         """Adaptive threshold segmentation of image
 
         Takes an image img
@@ -434,3 +419,70 @@ class ThresholdSegmentation(BaseSegmentation):
         contours = [contour for contour in contours
                     if min_size < cv2.contourArea(contour) < max_size]
         return contours
+
+class Stack(QtWidgets.QWidget):
+    """A function stack for adaptive thresholds"""
+    # Signals
+    valueChanged = QtCore.pyqtSignal(dict)
+
+    # List of functions that this class has
+    functions = {
+        'gaussian_blur': functions.GaussianBlur,
+        'adaptive_threshold': functions.AdaptiveThreshold,
+        'morphological_opening': functions.Morphology,
+        'contour_extract': functions.Contours,
+        'size_filter': functions.SizeFilter,
+        'draw_contours': functions.DrawContours,
+    }
+    # Description of the dependency tree.
+    graph = {
+        'output': 'draw_contours',
+        'draw_contours': ('input', 'size_filter'),
+        'size_filter': 'contour_extract',
+        'contour_extract': 'morphological_opening',
+        'morphological_opening': 'adaptive_threshold',
+        'adaptive_threshold': 'gaussian_blur',
+        'gaussian_blur': 'input',
+    }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.widgets = {}
+        self.create_gui()
+
+    def create_gui(self):
+        """Creates the widget of this method stack"""
+        layout = QtWidgets.QVBoxLayout()
+        self.setLayout(layout)
+        self.widgets = {
+            function: self.functions[function]() for function in self.functions
+        }
+        for widget in self.widgets:
+            self.widgets[widget].valueChanged.connect(self.emit)
+            layout.addWidget(self.widgets[widget])
+            print(self.widgets[widget])
+        image_choice = QtWidgets.QGridLayout()
+        box = QtWidgets.QGroupBox('Other options')
+        box.setLayout(image_choice)
+        widgets = functions.ChoiceParam(
+            choices=self.widgets.keys(),
+            labels=(self.widgets[widget].title for widget in self.widgets),
+            label='Display Image'
+        ).widget()
+        image_choice.addWidget(widgets['widget'], 0, 0)
+        image_choice.addWidget(widgets['label'], 0, 1)
+        image_choice.addWidget(QtWidgets.QPushButton('Load values...'), 1, 0)
+        image_choice.addWidget(QtWidgets.QPushButton('Save values...'), 1, 1)
+        layout.addWidget(box)
+
+    def emit(self):
+        """Emits a valueChanged signal"""
+        self.valueChanged.emit(self.value)
+
+    @property
+    def value(self) -> dict:
+        """Values provided by subservient functions"""
+        return {
+            function: self.widgets[function].value
+            for function in self.widgets
+        }

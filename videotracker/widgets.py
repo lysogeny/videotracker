@@ -8,8 +8,8 @@ from PyQt5.QtWidgets import (QWidget, QMainWindow, QAction, #QMessageBox,
                              QFileDialog, qApp, QCheckBox, QPushButton,
                              QGridLayout, QDockWidget, QVBoxLayout, QBoxLayout,
                              QLabel, QSizePolicy, QScrollArea, QSlider,
-                             QHBoxLayout, QSpinBox, QMessageBox)
-from PyQt5.QtGui import QIcon, QPalette, QImage, QPixmap
+                             QHBoxLayout, QSpinBox, QColorDialog)
+from PyQt5.QtGui import QIcon, QPalette, QImage, QPixmap, QColor
 from PyQt5.QtCore import Qt, pyqtSignal
 
 import cv2
@@ -18,22 +18,19 @@ from . import segmentations
 from . import helpers
 from .video import Video
 
-class BaseWidget(QWidget):
-    """An abstract widget"""
-    def __init__(self, *args, **kwargs):
-        super().__init__(self, *args, **kwargs)
-        self.create_widgets()
-        self.create_actions()
-        self.handle_widgets()
-        self.handle_actions()
+class ColourButton(QPushButton):
+    """A button, that when pushed, returns a colour"""
 
-    def create_gui(self):
-        """Method for creating gui elements. self.layout, other things"""
-        raise NotImplementedError
+    valueChanged = pyqtSignal(str)
 
-    def create_actions(self):
-        """Method for creating this widget's associated actions."""
-        raise NotImplementedError
+    def value(self):
+        """The value of the widget"""
+        return self._color.name()
+
+    def pick_colour(self):
+        """Pick the colour using the dialog"""
+        self._color = self.dialog.getColor(self._color)
+        self.setValue(self._color.name())
 
 class ImageView(QWidget):
     """The view area.
