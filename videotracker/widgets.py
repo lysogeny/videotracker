@@ -9,7 +9,7 @@ from PyQt5.QtWidgets import (QWidget, QMainWindow, QAction, #QMessageBox,
                              QGridLayout, QDockWidget, QVBoxLayout, QBoxLayout,
                              QLabel, QSizePolicy, QScrollArea, QSlider,
                              QHBoxLayout, QSpinBox, QColorDialog)
-from PyQt5.QtGui import QIcon, QPalette, QImage, QPixmap
+from PyQt5.QtGui import QIcon, QPalette, QImage, QPixmap, QColor
 from PyQt5.QtCore import Qt, pyqtSignal
 
 import cv2
@@ -33,18 +33,19 @@ class ColourButton(QPushButton):
         # pylint: disable=invalid-name
         # I can't fix qt5's stupid naming scheme
         """The value's setter. see value"""
-        self._value = value
+        self._color = QColor(value)
         self.setText(value)
         self.setStyleSheet('QPushButton {color: %s;}' % value)
         self.valueChanged.emit(value)
 
     def value(self):
         """The value of the widget"""
-        return self._value
+        return self._color.name()
 
     def pick_colour(self):
         """Pick the colour using the dialog"""
-        self.setValue(self.dialog.getColor().name())
+        self._color = self.dialog.getColor(self._color)
+        self.setValue(self._color.name())
 
 class ImageView(QWidget):
     """The view area.
@@ -280,14 +281,9 @@ class SideBar(QDockWidget):
         }
         super_layout = QVBoxLayout()
 
-
 class AdaptiveThresholdDock(SideBar):
     """Adaptive Threshold"""
     functions = [
-        blur, 
-        something, 
-        somethingelse, 
-        draw
     ]
 
 class SideDock(QDockWidget):

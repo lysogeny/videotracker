@@ -18,7 +18,7 @@ import cv2
 
 from .video import Video
 from . import contours
-from .widgets import ColourButton 
+from .widgets import ColourButton
 
 @dataclass
 class BaseParam:
@@ -104,7 +104,7 @@ class DisplayWorkerThread(QThread):
         if not self.frame['input']:
             self.video.position = frame
             self.frame['input'] = self.video.frame
-        self.frame 
+        self.frame
         if frame:
             self.frame['input'] = self.video
 
@@ -495,14 +495,6 @@ class ThresholdSegmentation(BaseSegmentation):
                     if min_size < cv2.contourArea(contour) < max_size]
         return contours
 
-
-dependency_graph = {
-    'blur': ['input'],
-    'adap_thresh': ['blur'],
-    'contours': ['adap_thresh'],
-    'result': ['contours', 'input'],
-}
-
 class BaseFunction:
     """Abstract function"""
     title: str
@@ -548,7 +540,7 @@ class GaussianBlur(BaseFunction):
 
 class AdaptiveThreshold(BaseFunction):
     """Computes an adaptive Threshold"""
-    title = 'Adaptive Threshold' 
+    title = 'Adaptive Threshold'
     inputs = {
         'blockSize': IntParam(singleStep=2, minimum=3, maximum=100, label='Block Size'),
         'C': IntParam(singleStep=1, minimum=-100, maximum=100, label='C Value'),
@@ -598,7 +590,6 @@ class DrawContours(BaseFunction):
     }
     function: Callable = cv2.drawContours
 
-
 class Stack:
     """A function stack for adaptive thresholds"""
     functions = {
@@ -646,10 +637,3 @@ class Stack:
         }
 
 
-nodes = {
-        'input': GetFrame,
-        'blur': GaussianBlur,
-        'adap_thresh': AdaptiveThreshold,
-        'contours': Contours,
-        'Result': DrawContours,
-}

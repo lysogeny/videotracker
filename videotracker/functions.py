@@ -134,7 +134,6 @@ class BaseFunction(qwidgets.QGroupBox):
         """Returns a function"""
         return self.function
 
-
 class GaussianBlur(BaseFunction):
     """Blurs Gauss"""
     title = 'Gaussian Blur'
@@ -145,7 +144,7 @@ class GaussianBlur(BaseFunction):
 
 class AdaptiveThreshold(BaseFunction):
     """Computes an adaptive Threshold"""
-    title = 'Adaptive Threshold' 
+    title = 'Adaptive Threshold'
     inputs = {
         'blockSize': IntParam(singleStep=2, minimum=3, maximum=100, label='Block Size'),
         'C': IntParam(singleStep=1, minimum=-100, maximum=100, label='C Value'),
@@ -256,6 +255,20 @@ class Stack(qwidgets.QWidget):
         for widget in self.widgets:
             self.widgets[widget].valueChanged.connect(self.emit)
             layout.addWidget(self.widgets[widget])
+            print(self.widgets[widget])
+        image_choice = qwidgets.QGridLayout()
+        box = qwidgets.QGroupBox('Other options')
+        box.setLayout(image_choice)
+        widgets = ChoiceParam(
+            choices=self.widgets.keys(),
+            labels=(self.widgets[widget].title for widget in self.widgets),
+            label='Display Image'
+        ).widget()
+        image_choice.addWidget(widgets['widget'], 0, 0)
+        image_choice.addWidget(widgets['label'], 0, 1)
+        image_choice.addWidget(qwidgets.QPushButton('Load values...'), 1, 0)
+        image_choice.addWidget(qwidgets.QPushButton('Save values...'), 1, 1)
+        layout.addWidget(box)
 
     def emit(self):
         """Emits a valueChanged signal"""
