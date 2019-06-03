@@ -4,7 +4,7 @@ import sys
 
 from PyQt5.QtWidgets import QApplication
 
-from . import widgets
+from . import windows
 from . import cli
 
 def gui():
@@ -14,6 +14,6 @@ def gui():
     app = QApplication(sys.argv)
     cli.setup_interrupt_handling()
     sys.excepthook = cli.pop_exception
-    widget = widgets.MainView(csv=args.csv, vid=args.output, in_vid=args.input)
+    widget = windows.MainView(csv=args.csv, vid=args.output, in_vid=args.input)
     widget.show()
     sys.exit(app.exec_())

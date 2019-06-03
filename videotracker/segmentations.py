@@ -3,6 +3,8 @@
 import json
 import csv
 
+from typing import Callable
+
 from PyQt5 import QtWidgets, QtCore
 
 import cv2
@@ -17,7 +19,7 @@ class DisplayWorkerThread(QtCore.QThread):
     def __init__(self, method, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # Property variables
-        self.function = method()
+        #self.function = method()
         self.position = 0 # Position in the video
         self.options = {'input': None, 'output':None}
         # Other variables
@@ -420,35 +422,41 @@ class ThresholdSegmentation(BaseSegmentation):
                     if min_size < cv2.contourArea(contour) < max_size]
         return contours
 
-class Stack(QtWidgets.QWidget):
-    """A function stack for adaptive thresholds"""
-    # Signals
-    valueChanged = QtCore.pyqtSignal(dict)
 
-    # List of functions that this class has
-    functions = {
-        'gaussian_blur': functions.GaussianBlur,
-        'adaptive_threshold': functions.AdaptiveThreshold,
-        'morphological_opening': functions.Morphology,
-        'contour_extract': functions.Contours,
-        'size_filter': functions.SizeFilter,
-        'draw_contours': functions.DrawContours,
-    }
-    # Description of the dependency tree.
-    graph = {
-        'output': 'draw_contours',
-        'draw_contours': ('input', 'size_filter'),
-        'size_filter': 'contour_extract',
-        'contour_extract': 'morphological_opening',
-        'morphological_opening': 'adaptive_threshold',
-        'adaptive_threshold': 'gaussian_blur',
-        'gaussian_blur': 'input',
-    }
+class BaseStack(QtWidgets.QWidget):
+    """An abstract stack of function"""
+    valueChanged = QtCore.pyqtSignal(dict)
+    results_changed = QtCore.pyqtSignal(int)
+
+    functions = {}
+    graph = {}
+    outputs = {}
+
+    @property
+    def enabled(self) -> bool:
+        """State of the widget"""
+        return self._enabled
+
+    @enabled.setter
+    def enabled(self, value: bool):
+        self._enabled = value
+        for widget in self.widgets:
+            self.widgets[widget].setEnabled(value)
+
+    @property
+    def function(self) -> Callable:
+        """Returns the function"""
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self._enabled = False
         self.widgets = {}
         self.create_gui()
+        self.outputs = {
+            function: None
+            for function in self.functions
+        }
+        self.thread = DisplayWorkerThread(self.function)
 
     def create_gui(self):
         """Creates the widget of this method stack"""
@@ -473,6 +481,12 @@ class Stack(QtWidgets.QWidget):
         image_choice.addWidget(widgets['label'], 0, 1)
         image_choice.addWidget(QtWidgets.QPushButton('Load values...'), 1, 0)
         image_choice.addWidget(QtWidgets.QPushButton('Save values...'), 1, 1)
+        output_control = QtWidgets.QGridLayout()
+        output_box = QtWidgets.QGroupBox('Outputs')
+        output_box.setLayout(output_control)
+        output_control.addWidget(QtWidgets.QPushButton('CSV output'))
+        output_control.addWidget(QtWidgets.QPushButton('CSV output'), 1, 0)
+
         layout.addWidget(box)
 
     def emit(self):
@@ -486,3 +500,29 @@ class Stack(QtWidgets.QWidget):
             function: self.widgets[function].value
             for function in self.widgets
         }
+
+
+class Stack(BaseStack):
+    """A function stack for adaptive thresholds"""
+    # List of functions that this class has
+    functions = {
+        'gaussian_blur': functions.GaussianBlur,
+        'adaptive_threshold': functions.AdaptiveThreshold,
+        'morphological_opening': functions.Morphology,
+        'contour_extract': functions.Contours,
+        'size_filter': functions.SizeFilter,
+        'draw_contours': functions.DrawContours,
+    }
+    # Description of the dependency tree.
+    graph = {
+        'output': 'draw_contours',
+        'draw_contours': ('input', 'size_filter'),
+        'size_filter': 'contour_extract',
+        'contour_extract': 'morphological_opening',
+        'morphological_opening': 'adaptive_threshold',
+        'adaptive_threshold': 'gaussian_blur',
+        'gaussian_blur': 'input',
+    }
+
+class NullStack(BaseStack):
+    """A stack that does nothing"""
