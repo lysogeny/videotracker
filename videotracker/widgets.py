@@ -18,7 +18,7 @@ from . import segmentations
 from . import helpers
 from .video import Video
 
-class ColourButton(QPushButton):
+class ColorButton(QPushButton):
     """A button, that when pushed, returns a colour"""
 
     valueChanged = pyqtSignal(str)

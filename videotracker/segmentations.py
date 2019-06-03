@@ -277,7 +277,7 @@ class SegmentationThread(QtCore.QThread):
         """Function that defines the segmentation"""
         raise NotImplementedError
 
-class BaseSegmentation(QtCore.QWidget):
+class BaseSegmentation(QtWidgets.QWidget):
     #pylint: disable=abstract-method
     # This class is also abstract
     """Abstract segmentation"""
