@@ -18,7 +18,7 @@ class ModuleDialog(QtWidgets.QDialog):
         self.setModal(True)
         self.create_gui()
         self.populate_list()
-        self.exec_()
+        self._result = self.exec_() == self.Accepted
 
     def create_gui(self):
         """Creates the gui of the dialog"""
@@ -60,10 +60,16 @@ class ModuleDialog(QtWidgets.QDialog):
                 item.setToolTip(full_description)
                 self.widget.addItem(item)
 
+    @property
     def value(self):
         """Returns value of the module dialog"""
         name = self.widget.currentItem().text()
         return self.options[name]
+
+    @property
+    def result(self):
+        """Returns a result, True or False, indicating if okay or cancel was chosen"""
+        return self._result
 
 class MainView(QtWidgets.QMainWindow):
     """A main view
@@ -124,10 +130,10 @@ class MainView(QtWidgets.QMainWindow):
             action.setEnabled(value)
         self.dock.go_button.setEnabled(value)
         if value is not None:
-            self.options.values_changed.connect(self.options.thread.set_options)
+            #self.options.values_changed.connect(self.options.thread.set_options)
             self.options.thread.start()
         else:
-            helpers.disconnect(self.options.values_changed)
+            #helpers.disconnect(self.options.values_changed)
             self.options.thread.stop()
 
     @property
@@ -153,41 +159,38 @@ class MainView(QtWidgets.QMainWindow):
     @property
     def input(self) -> str:
         """A file handle describing the input (str)"""
-        return self.files['input']
+        return self.dock.input
     @input.setter
     def input(self, value: str):
-        self.files['input'] = value
         self.dock.input = value
+        if value is None:
+            self.loaded = False
+        else:
+            self.loaded = True
 
     @property
     def csv(self) -> str:
         """Sets the csv output
 
-        Either None for no ouptut or a string for a file handle where csv will be placed.
+        Either None for no ouptut or a string for a file handle where csv will
+        be placed.
         """
-        if self.dock is None:
-            return None
-        return self.files['csv']
+        return self.dock.csv
     @csv.setter
     def csv(self, value: str):
-        if self.dock is not None:
-            self.dock.csv = value
-        self.files['csv'] = value
+        self.dock.csv = value
 
     @property
     def vid(self) -> str:
         """Sets the vid output
 
-        Either None for no ouptut or a string for a file handle where vid will be placed.
+        Either None for no ouptut or a string for a file handle where video will
+        be placed.
         """
-        if self.dock is None:
-            return None
-        return self.files['vid']
+        return self.dock.vid
     @vid.setter
     def vid(self, value: str):
-        if self.dock is not None:
-            self.dock.vid = value
-        self.files['vid'] = value
+        self.dock.vid = value
 
     def __init__(self, csv=None, vid=None, in_vid=None):
         super().__init__()
@@ -195,10 +198,6 @@ class MainView(QtWidgets.QMainWindow):
             'running': False,
             'loaded': False,
             'image_control': False
-        }
-        self.files = {
-            'vid': None,
-            'csv': None,
         }
         self.create_gui()
         self.create_actions()
@@ -321,37 +320,40 @@ class MainView(QtWidgets.QMainWindow):
         file_name = QtWidgets.QFileDialog.getOpenFileName(self, 'Open file', self.video_file)
         if file_name[0]:
             self.video_file = file_name[0]
-            self.input_load()
+            self.input_load(file_name[0])
 
     def input_load(self, video_file=None):
         """Loads a video file"""
-        if video_file:
+        if video_file is not None:
             self.video_file = video_file
-        self.loaded = False # Unset loaded
         self.image.pos = 0 # ImageViewer gets a new position
-        self.image.pos_max = helpers.video_max_frame(video_file) # ImageViewer gets a new max_position
-        self.input = video_file # Input is defined
-        # CSV and video output files are guessed
+        #print(video_file)
+        #print(self.video_file)
+        self.image.pos_max = helpers.video_max_frame(video_file)
+        # ImageViewer gets a new max_position
+        # Input is defined, CSV and video output files are guessed.
+        # All of these propagate into the subwidgets.
         file_tokenised = os.path.splitext(self.video_file)
+        self.input = self.video_file
         self.csv = file_tokenised[0] + '_output' + '.csv'
         self.vid = file_tokenised[0] + '_output' + file_tokenised[1]
-        self.loaded = True # Reset loaded
         self.setWindowTitle(self.TITLE + ' ' + self.video_file)
         self.statusbar.showMessage('Loaded file {}'.format(self.video_file))
 
     def module_pick(self):
         """Spawns a picker dialog for modules"""
         dialog = ModuleDialog()
-        print(dialog.value())
+        if dialog.result:
+            module = dialog.value
+            print('User chose new module {}'.format(module))
+            self.module_load(module)
 
-    def module_load(self, method=segmentations.Stack):
+    def module_load(self, method=segmentations.ThresholdStack):
         """Creates a dock with the given method"""
         # Delete old options
-        del self.options
         # Create new options
         self.options = method()
         self.dock.module = self.options
         #self.options.thread.finished.connect(lambda: setattr(self, 'running', False))
         #self.options.thread.loop_complete.connect(lambda: setattr(self, 'running', False))
         #self.options.thread.computing.connect(helpers.change_cursor)
-

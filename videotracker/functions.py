@@ -94,7 +94,7 @@ class BaseFunction(qwidgets.QGroupBox):
     """Abstract function"""
     title: str
     inputs: dict
-    function: Callable
+    #function: Callable
 
     valueChanged = QtCore.pyqtSignal(dict)
 
@@ -113,8 +113,8 @@ class BaseFunction(qwidgets.QGroupBox):
             print(self.widgets)
             sub_widget = self.widgets[param]
             sub_widget['widget'].valueChanged.connect(self.emit)
-            layout.addWidget(sub_widget['widget'], row, 0)
-            layout.addWidget(sub_widget['label'], row, 1)
+            layout.addWidget(sub_widget['widget'], row, 1)
+            layout.addWidget(sub_widget['label'], row, 0)
         self.setLayout(layout)
         return self
 
@@ -134,13 +134,26 @@ class BaseFunction(qwidgets.QGroupBox):
         """Returns a function"""
         return self.function
 
+    def function(self, inputs):
+        """A function"""
+        raise NotImplementedError
+
 class GaussianBlur(BaseFunction):
     """Blurs Gauss"""
     title = 'Gaussian Blur'
     inputs = {
         'size': IntParam(minimum=1, maximum=100, singleStep=2, label='Size'),
     }
-    function = lambda x, size: cv2.GaussianBlur(x, (size, size), 0)
+    def function(self, inputs):
+        """Blurs Gaussianly
+
+        Inputs:
+            0: image
+        """
+        values = self.values
+        # This is an example of a slightly convoluted mapping, the values are
+        # not directly mapped to the function, and have to be defined manually.
+        return cv2.GaussianBlur(inputs[0], (values['size'], values['size']), 0)
 
 class AdaptiveThreshold(BaseFunction):
     """Computes an adaptive Threshold"""
@@ -154,9 +167,17 @@ class AdaptiveThreshold(BaseFunction):
             label='Threshold Type',
         ),
     }
-    function = lambda x, options: cv2.adaptiveThreshold(x, maxValue=255,
-                                                        adaptiveMethod=cv2.THRESH_BINARY_INV,
-                                                        **options)
+    def function(self, inputs):
+        """Applies an adaptive threshold
+
+        Inputs:
+            0: image
+        """
+        # This is an example of a somewhat simple function, most of the inputs
+        # are mapped directly to the function itself.
+        return cv2.adaptiveThreshold(*inputs, maxValue=255,
+                                     adaptiveMethod=cv2.THRESH_BINARY_INV,
+                                     **self.values)
 
 class Contours(BaseFunction):
     """Extracts contours"""
@@ -168,12 +189,19 @@ class Contours(BaseFunction):
             label='Retrieval Mode',
         ),
         'method': ChoiceParam(
-            choices=(cv2.CHAIN_APPROX_NONE, cv2.CHAIN_APPROX_SIMPLE, cv2.CHAIN_APPROX_TC89_L1, cv2.CHAIN_APPROX_TC89_KCOS),
+            choices=(cv2.CHAIN_APPROX_NONE, cv2.CHAIN_APPROX_SIMPLE,
+                     cv2.CHAIN_APPROX_TC89_L1, cv2.CHAIN_APPROX_TC89_KCOS),
             labels=('All contour points', 'Compress segments', 'Teh-Chin L1', 'Teh-Chin KCOS'),
             label='Method',
         ),
     }
-    function: Callable = cv2.findContours
+    def function(self, inputs):
+        """Extracts contours
+
+        Inputs:
+            0: image
+        """
+        return cv2.findContours(*inputs, **self.values)
 
 class SizeFilter(BaseFunction):
     """Provides a method for size filters"""
@@ -182,8 +210,14 @@ class SizeFilter(BaseFunction):
         'minimum': IntParam(singleStep=1, maximum=1000, label='Minimum Size'),
         'maximum': IntParam(singleStep=1, maximum=1000, value=1000, label='Maximum Size'),
     }
-    function: Callable = lambda x, minimum, maximum: [i for i in x
-                                                      if minimum <= cv2.contourArea(i) <= maximum]
+    def function(self, inputs):
+        """Filters contours by enclosed area
+
+        Inputs:
+            0: contours
+        """
+        return [i for i in inputs[0]
+                if self.values['minimum'] <= cv2.contourArea(i) <= self.values['maximum']]
 
 class DrawContours(BaseFunction):
     """Draws Contours"""
@@ -192,9 +226,17 @@ class DrawContours(BaseFunction):
         'color': ColorParam(),
         'thickness': IntParam(minimum=1, maximum=100, label='Thickness')
     }
-    function: Callable = cv2.drawContours
+    def function(self, inputs):
+        """Draws contours
+
+        Inputs:
+            0: image
+            1: contours
+        """
+        return cv2.drawContours(*inputs, **self.values)
 
 class Morphology(BaseFunction):
+    """Morphological operations"""
     title: str = 'Morphological Operation'
     inputs: dict = {
         'ksize': IntParam(minimum=1, maximum=100, label='Kernel Size', singleStep=2),
@@ -210,8 +252,12 @@ class Morphology(BaseFunction):
             label='Operation',
         )
     }
-    function: Callable = lambda x, opt: cv2.morphologyEx(
-        x, opt['operation'],
-        cv2.getStructuringElement(opt['shape'], (opt['ksize'], opt['ksize']))
-    )
+    def function(self, inputs):
+        """Morphological Operations
 
+        Inputs:
+            0: image
+        """
+        kernel = cv2.getStructuringElement(self.values['shape'],
+                                           (self.values['ksize'], self.values['ksize']))
+        return cv2.morphologyEx(inputs[0], self.values['operation'], kernel)

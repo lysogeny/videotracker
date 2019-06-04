@@ -16,25 +16,49 @@ from . import functions
 class DisplayWorkerThread(QtCore.QThread):
     """A thread for continuously updated displays"""
 
-    def __init__(self, method, *args, **kwargs):
+    @property
+    def input(self) -> str:
+        """The input file"""
+        return self.files['input']
+    @input.setter
+    def input(self, value: str):
+        self.files['input'] = value
+
+    @property
+    def csv(self) -> str:
+        """The output CSV file"""
+        return self.files['csv']
+    @csv.setter
+    def csv(self, value: str):
+        pass
+
+    @property
+    def vid(self) -> str:
+        """The output Video file"""
+        return self.files['vid']
+    @vid.setter
+    def vid(self, value: str):
+        pass
+
+    def __init__(self, parent, *args, **kwargs):
+        # Parent refers to a stack object as described below.
+        # Outputs will be made available to parent, and parent's signals will be
+        # sent.
         super().__init__(*args, **kwargs)
         # Property variables
-        #self.function = method()
+        self.parent = parent
         self.position = 0 # Position in the video
         self.options = {'input': None, 'output':None}
+        self.files = {'vid': None, 'csv': None, 'input': None}
         # Other variables
         self.frame = {} # A dict of values and frames that are the results of the various steps.
         self.view = None # The frame that is displayed by external guys
         self.video = None # The video object
+        self.running = True
 
-    def compute(self, options: dict = None, frame: int = None):
-        """Compute the image for frame frame"""
-        if not self.frame['input']:
-            self.video.position = frame
-            self.frame['input'] = self.video.frame
-        self.frame
-        if frame:
-            self.frame['input'] = self.video
+    def compute(self):
+        for method in self.parent.method_order:
+            result = self.parent.functions[method](self.images[prior_method])
 
     def loop(self):
         """Loop for updated images"""
@@ -61,8 +85,8 @@ class DisplayWorkerThread(QtCore.QThread):
 
     def run(self):
         """Creates a video object and enters the loop"""
-        self.video = Video(self.input_file)
-        self.exec_()
+        self.video = Video(self.input)
+        self.loop()
 
 class RunningWorkerThread(QtCore.QThread):
     """A worker thread for running the segmentation"""
@@ -429,8 +453,7 @@ class BaseStack(QtWidgets.QWidget):
     results_changed = QtCore.pyqtSignal(int)
 
     functions = {}
-    graph = {}
-    outputs = {}
+    method_order = {}
 
     @property
     def enabled(self) -> bool:
@@ -443,20 +466,49 @@ class BaseStack(QtWidgets.QWidget):
         for widget in self.widgets:
             self.widgets[widget].setEnabled(value)
 
-    @property
     def function(self) -> Callable:
         """Returns the function"""
+
+    @property
+    def input(self) -> str:
+        """The input file"""
+        return self.files['input']
+    @input.setter
+    def input(self, value: str):
+        self.files['input'] = value
+        self.thread.input = value
+
+    @property
+    def csv(self) -> str:
+        """The output CSV file"""
+        return self.files['csv']
+    @csv.setter
+    def csv(self, value: str):
+        self.files['csv'] = value
+        self.thread.csv = value
+
+    @property
+    def vid(self) -> str:
+        """The output Video file"""
+        return self.files['vid']
+    @vid.setter
+    def vid(self, value: str):
+        self.files['vid'] = value
+        self.thread.vid = value
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._enabled = False
         self.widgets = {}
         self.create_gui()
+        self.files = {
+        }
         self.outputs = {
             function: None
             for function in self.functions
         }
-        self.thread = DisplayWorkerThread(self.function)
+        self.thread = DisplayWorkerThread(self)
+        #self.valueChanged.connect(self.thread.recompute)
 
     def create_gui(self):
         """Creates the widget of this method stack"""
@@ -465,28 +517,30 @@ class BaseStack(QtWidgets.QWidget):
         self.widgets = {
             function: self.functions[function]() for function in self.functions
         }
-        for widget in self.widgets:
+        for widget in self.method_order:
             self.widgets[widget].valueChanged.connect(self.emit)
             layout.addWidget(self.widgets[widget])
-            print(self.widgets[widget])
-        image_choice = QtWidgets.QGridLayout()
         box = QtWidgets.QGroupBox('Other options')
-        box.setLayout(image_choice)
         widgets = functions.ChoiceParam(
             choices=self.widgets.keys(),
             labels=(self.widgets[widget].title for widget in self.widgets),
             label='Display Image'
         ).widget()
-        image_choice.addWidget(widgets['widget'], 0, 0)
-        image_choice.addWidget(widgets['label'], 0, 1)
-        image_choice.addWidget(QtWidgets.QPushButton('Load values...'), 1, 0)
-        image_choice.addWidget(QtWidgets.QPushButton('Save values...'), 1, 1)
+        image_choice = QtWidgets.QHBoxLayout()
+        image_choice.addWidget(widgets['label'])
+        image_choice.addWidget(widgets['widget'])
+        value_load = QtWidgets.QHBoxLayout()
+        value_load.addWidget(QtWidgets.QPushButton('Load...'))
+        value_load.addWidget(QtWidgets.QPushButton('Save...'))
+        boxbox = QtWidgets.QVBoxLayout()
+        boxbox.addLayout(image_choice)
+        boxbox.addLayout(value_load)
+        box.setLayout(boxbox)
         output_control = QtWidgets.QGridLayout()
         output_box = QtWidgets.QGroupBox('Outputs')
         output_box.setLayout(output_control)
         output_control.addWidget(QtWidgets.QPushButton('CSV output'))
         output_control.addWidget(QtWidgets.QPushButton('CSV output'), 1, 0)
-
         layout.addWidget(box)
 
     def emit(self):
@@ -502,7 +556,7 @@ class BaseStack(QtWidgets.QWidget):
         }
 
 
-class Stack(BaseStack):
+class ThresholdStack(BaseStack):
     """A function stack for adaptive thresholds"""
     # List of functions that this class has
     functions = {
@@ -514,15 +568,17 @@ class Stack(BaseStack):
         'draw_contours': functions.DrawContours,
     }
     # Description of the dependency tree.
-    graph = {
-        'output': 'draw_contours',
-        'draw_contours': ('input', 'size_filter'),
-        'size_filter': 'contour_extract',
-        'contour_extract': 'morphological_opening',
-        'morphological_opening': 'adaptive_threshold',
-        'adaptive_threshold': 'gaussian_blur',
-        'gaussian_blur': 'input',
-    }
+    method_order = [
+        'gaussian_blur',
+        'adaptive_threshold',
+        'morphological_opening',
+        'contour_extract',
+        'size_filter',
+        'draw_contours',
+    ]
 
 class NullStack(BaseStack):
-    """A stack that does nothing"""
+    """A stack that does nothing.
+
+    No really, nothing is implemented here.
+    """

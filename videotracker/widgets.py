@@ -260,6 +260,19 @@ class SideDock(QDockWidget):
     started = pyqtSignal(bool)
 
     @property
+    def input(self) -> str:
+        """Input file
+
+        None indicates no input file.
+        This attribute propagates to the sidebar module.
+        """
+        return self.files['input']
+    @input.setter
+    def input(self, value: str):
+        self.files['input'] = value
+        self.module.input = value
+
+    @property
     def csv(self) -> str:
         """CSV output. Either string or None.
 
@@ -315,16 +328,9 @@ class SideDock(QDockWidget):
 
         Setting this set the checkbox to the appropriate value.
         The checkbox will not emit signals for that change.
+        No setter is implemented.
         """
         return bool(self.preview_cbox.checkState())
-    @preview.setter
-    def preview(self, value: bool):
-        self.preview_cbox.blockSignals(True)
-        if value:
-            self.preview_cbox.setCheckState(2)
-        else:
-            self.preview_cbox.setCheckState(0)
-        self.preview_cbox.blockSignals(False)
 
     @property
     def running(self):
@@ -355,16 +361,21 @@ class SideDock(QDockWidget):
         else:
             self.go_button.setText('Go')
 
-
     @property
     def module(self):
         """The tracking module"""
         return self._module
     @module.setter
     def module(self, value):
-        self.custom_box.removeWidget(self._module)
+        del self.module
         self._module = value
         self.custom_box.addWidget(value)
+    @module.deleter
+    def module(self):
+        self.custom_box.removeWidget(self._module)
+        if self._module is not None:
+            self._module.deleteLater()
+        #del self._module
 
     def __init__(self, module=None):
         super().__init__('Options')
@@ -373,7 +384,6 @@ class SideDock(QDockWidget):
         self.files_persist = {'csv': '', 'vid': ''}
         self._module = None
         self.create_gui()
-        self.preview = True
         self.running = False
         if module:
             self.module = module
@@ -405,6 +415,20 @@ class SideDock(QDockWidget):
         if file_name[0]:
             self.vid = file_name[0]
 
+    def set_vid(self, change: int):
+        """Sets the video output to the change value"""
+        if bool(change):
+            self.vid = self.files_persist['vid']
+        else:
+            self.vid = None
+
+    def set_csv(self, change: int):
+        """Sets the csv output to the change value"""
+        if bool(change):
+            self.csv = self.files_persist['csv']
+        else:
+            self.csv = None
+
     def create_gui(self):
         """Creates the dock gui
 
@@ -415,20 +439,20 @@ class SideDock(QDockWidget):
         setting vid_file and csv_file.
         """
         # Elements
-        self.csv_cbox = QCheckBox('Output CSV', stateChanged=lambda x: setattr(self, 'csv', None if not bool(x) else self.files_persist['csv']),
+        self.csv_cbox = QCheckBox('Output CSV', stateChanged=self.set_csv,
                                   statusTip='Enable CSV output')
         self.csv_button = QPushButton('File...', enabled=self.csv_cbox.checkState(),
                                       clicked=self.pick_csv,
                                       maximumWidth=50,
                                       statusTip='Output CSV')
         self.vid_cbox = QCheckBox('Output Video', statusTip='Enable Video output',
-                                  stateChanged=lambda x: setattr(self, 'vid', None if not bool(x) else self.files_persist['vid']))
+                                  stateChanged=self.set_vid)
         self.vid_button = QPushButton('File...', enabled=self.vid_cbox.checkState(),
                                       clicked=self.pick_vid,
                                       maximumWidth=50,
                                       statusTip='Output video')
         self.preview_cbox = QCheckBox('Preview', statusTip='Show video during computation',
-                                      stateChanged=lambda x: setattr(self, 'checked', bool(x)))
+                                      checked=True)
         self.go_button = QPushButton('Go', maximumWidth=50, clicked=self.emit_go, enabled=False)
         #self.preview_cbox.stateChanged.connect(lambda x: setattr(self.custom.thread, 'draw', bool(x)))
         # Grid layout
