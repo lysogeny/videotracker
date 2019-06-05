@@ -21,7 +21,14 @@ class BaseParam:
     widget_callable is the type of widget to define. If the widget does not
     provide the value property (setValue, valueChanged, value), You need to
     manually define .widget (see ChoiceParam for an example).
-    The most common types of parameter are however defined (see methods below)
+    The most common types of parameter are however defined (see methods below).
+
+    Defining your own custom parameter type is done by having a dataclass
+    inherit from BaseParam. In that dataclass you define a series of values
+    which can be used in the widget_callable's constructor.
+
+    In practical terms this means that you look for a widget that you would like to have as a parameter, and have the values
+
     """
     label: str = ''
     widget_callable: Callable = qwidgets.QWidget
@@ -97,11 +104,17 @@ class BaseFunction(qwidgets.QGroupBox):
     #function: Callable
 
     valueChanged = QtCore.pyqtSignal(dict)
+    result_changed = QtCore.pyqtSignal()
+    # The results_changed signal is emitted after self.results is assigned.
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.create_gui()
         self.setTitle(self.title)
+        self.result = None
+        # We need to connect the valuechanges to a function that recomputes
+        # things.
+        self.valueChanged.connect(self.__call__)
 
     def create_gui(self):
         """Creates the widget of this function"""
@@ -120,19 +133,21 @@ class BaseFunction(qwidgets.QGroupBox):
 
     def emit(self):
         """Emits a valueChanged signal"""
-        self.valueChanged.emit(self.value)
+        self.valueChanged.emit(self.values)
 
     @property
-    def value(self) -> dict:
+    def values(self) -> dict:
         """Values of the widget"""
         return {
             param: self.widgets[param]['widget'].value()
             for param in self.widgets
         }
 
-    def call(self):
-        """Returns a function"""
-        return self.function
+    def __call__(self, *args, **kwargs):
+        """Runs this function's computation"""
+        self.result = self.function(*args, **kwargs)
+        self.result_changed.emit()
+        return self.result
 
     def function(self, inputs):
         """A function"""
@@ -195,6 +210,7 @@ class Contours(BaseFunction):
             label='Method',
         ),
     }
+    frame = None
     def function(self, inputs):
         """Extracts contours
 

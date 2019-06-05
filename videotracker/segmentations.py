@@ -1,4 +1,30 @@
-"""Various segmentation methods"""
+"""Various segmentation methods
+
+
+Stacks. Stacks have various functions associated with them.
+
+A function has some widgets associated with it, which provide the function's
+values. The only values not defined by the widgets are the function's inputs,
+i.e. images. The widget thus has a valueChanged signal that is emitted when
+anything changes. This should trigger a recomputation of the image results.
+The other signal a function has, the results_changed, is emitted when the
+computation is completed. This signal should then be connected to the next
+function, as defined in the stack's dependency graph.
+
+The stack's dependency graph is a directed graph. It should be built in reverse,
+meaning that for each function, the functions that need to run before it are
+defined.
+The dependency graph is then used to connect the results_changed signals to the
+appropriate function methods.
+
+So what specifically is the method I need to connect to? Both valueChanged and
+results_changed need some type of slot to connect to. The problem herein lies
+with the slot not having any idea of where the inputs for it are.  The __call__
+method of the function's probably should use some reference to the previous
+result.  We thus also need a input property for each function. This property is
+then used by __call__ to calculate the next result.
+
+"""
 
 import json
 import csv
@@ -501,14 +527,23 @@ class BaseStack(QtWidgets.QWidget):
         self._enabled = False
         self.widgets = {}
         self.create_gui()
-        self.files = {
-        }
-        self.outputs = {
-            function: None
-            for function in self.functions
-        }
+        self.files = {}
+        self.outputs = {function: None
+                        for function in self.functions}
         self.thread = DisplayWorkerThread(self)
         #self.valueChanged.connect(self.thread.recompute)
+
+    def __call__(self, arg):
+        """Takes an input image `arg`, and runs a computation.
+
+        Returns a resulting image, and stores all intermediary results in the
+        outputs dict.
+        """
+        for function_name in self.method_order:
+            function = self.method_order[function_name]
+            self.outputs[function_name] = arg = function(arg)
+        return arg
+
 
     def create_gui(self):
         """Creates the widget of this method stack"""
@@ -517,7 +552,7 @@ class BaseStack(QtWidgets.QWidget):
         self.widgets = {
             function: self.functions[function]() for function in self.functions
         }
-        for widget in self.method_order:
+        for widget in self.widgets:
             self.widgets[widget].valueChanged.connect(self.emit)
             layout.addWidget(self.widgets[widget])
         box = QtWidgets.QGroupBox('Other options')
@@ -545,13 +580,13 @@ class BaseStack(QtWidgets.QWidget):
 
     def emit(self):
         """Emits a valueChanged signal"""
-        self.valueChanged.emit(self.value)
+        self.valueChanged.emit(self.values)
 
     @property
-    def value(self) -> dict:
+    def values(self) -> dict:
         """Values provided by subservient functions"""
         return {
-            function: self.widgets[function].value
+            function: self.widgets[function].values
             for function in self.widgets
         }
 
@@ -562,20 +597,26 @@ class ThresholdStack(BaseStack):
     functions = {
         'gaussian_blur': functions.GaussianBlur,
         'adaptive_threshold': functions.AdaptiveThreshold,
-        'morphological_opening': functions.Morphology,
+        'morphology': functions.Morphology,
         'contour_extract': functions.Contours,
         'size_filter': functions.SizeFilter,
         'draw_contours': functions.DrawContours,
     }
     # Description of the dependency tree.
-    method_order = [
-        'gaussian_blur',
-        'adaptive_threshold',
-        'morphological_opening',
-        'contour_extract',
-        'size_filter',
-        'draw_contours',
-    ]
+    # Disappointingly, this actually needs to be a graph, because otherwise we
+    # can't figure out what goes where for non-monadic functions.
+    # method_graph describes how the signal's and slots from the different
+    # functions are connected.
+    method_graph = {
+        'image': 'draw_contours',
+        'data': 'size_filter',
+        'draw_contours': ('input', 'size_filter'),
+        'size_filter': 'contour_extract',
+        'contour_extract': 'morphology',
+        'morphology': 'adaptive_threshold',
+        'adaptive_threshold': 'gaussian_blur',
+        'gaussian_blur': 'input'
+    }
 
 class NullStack(BaseStack):
     """A stack that does nothing.

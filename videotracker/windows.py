@@ -244,7 +244,7 @@ class MainView(QtWidgets.QMainWindow):
                 QtWidgets.QAction(QtGui.QIcon.fromTheme('document-open'), 'Open...',
                                   statusTip='Opens a new file',
                                   triggered=self.input_pick),
-                QtWidgets.QAction(QtGui.QIcon.fromTheme('folder-open'), 'Module...',
+                QtWidgets.QAction(QtGui.QIcon.fromTheme('window-new'), 'Module...',
                                   statusTip='Loads a tracking module',
                                   triggered=self.module_pick),
             ],
