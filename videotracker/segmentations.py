@@ -38,84 +38,7 @@ import cv2
 from .video import Video
 from . import contours
 from . import functions
-
-class DisplayWorkerThread(QtCore.QThread):
-    """A thread for continuously updated displays"""
-
-    @property
-    def input(self) -> str:
-        """The input file"""
-        return self.files['input']
-    @input.setter
-    def input(self, value: str):
-        self.files['input'] = value
-
-    @property
-    def csv(self) -> str:
-        """The output CSV file"""
-        return self.files['csv']
-    @csv.setter
-    def csv(self, value: str):
-        pass
-
-    @property
-    def vid(self) -> str:
-        """The output Video file"""
-        return self.files['vid']
-    @vid.setter
-    def vid(self, value: str):
-        pass
-
-    def __init__(self, parent, *args, **kwargs):
-        # Parent refers to a stack object as described below.
-        # Outputs will be made available to parent, and parent's signals will be
-        # sent.
-        super().__init__(*args, **kwargs)
-        # Property variables
-        self.parent = parent
-        self.position = 0 # Position in the video
-        self.options = {'input': None, 'output':None}
-        self.files = {'vid': None, 'csv': None, 'input': None}
-        # Other variables
-        self.frame = {} # A dict of values and frames that are the results of the various steps.
-        self.view = None # The frame that is displayed by external guys
-        self.video = None # The video object
-        self.running = True
-
-    def compute(self):
-        for method in self.parent.method_order:
-            result = self.parent.functions[method](self.images[prior_method])
-
-    def loop(self):
-        """Loop for updated images"""
-        last_position = -1
-        last_options = {}
-        while self.running:
-            position_changed = last_position != self.position
-            options_changed = last_options != self.options
-            if position_changed:
-                # Requested position has changed, we grab the new image
-                if self.position - last_position < 16:
-                    # if the new position is close and in the future, this is very quick
-                    while self.video.position != self.position:
-                        self.frame['input'] = next(self.video)
-                else:
-                    # Use this for other position changes.
-                    self.video.position = self.position
-                    self.frame['input'] = self.video.frame
-            if options_changed or position_changed:
-                self.compute()
-            position_changed, options_changed = False, False
-            last_position, last_options = self.position, self.options
-            self.usleep(100)
-
-    def run(self):
-        """Creates a video object and enters the loop"""
-        self.video = Video(self.input)
-        self.loop()
-
-class RunningWorkerThread(QtCore.QThread):
-    """A worker thread for running the segmentation"""
+from .functions import params
 
 class SegmentationThread(QtCore.QThread):
     """A thread for segmentations
@@ -438,17 +361,17 @@ class BaseSegmentation(QtWidgets.QWidget):
 class ThresholdSegmentation(BaseSegmentation):
     """Sample segmentation"""
     params = {
-        'blur': functions.IntParam(singleStep=2, minimum=1, maximum=100, label='Blur'),
-        'thresh_type': functions.ChoiceParam(
+        'blur': params.IntParam(singleStep=2, minimum=1, maximum=100, label='Blur'),
+        'thresh_type': params.ChoiceParam(
             choices=(cv2.ADAPTIVE_THRESH_MEAN_C, cv2.ADAPTIVE_THRESH_GAUSSIAN_C),
             labels=('Mean', 'Gaussian'),
             label='Threshold Type',
         ),
-        'size': functions.IntParam(singleStep=2, minimum=3, maximum=100, label='Block Size'),
-        'c_value': functions.IntParam(singleStep=1, minimum=-100, maximum=100, label='C Value'),
-        'kernel_size': functions.IntParam(singleStep=2, minimum=1, maximum=100, label='Kernel Size'),
-        'min_size': functions.IntParam(singleStep=1, maximum=1000, label='Minimum Size'),
-        'max_size': functions.IntParam(singleStep=1, maximum=1000, value=1000, label='Maximum Size'),
+        'size': params.IntParam(singleStep=2, minimum=3, maximum=100, label='Block Size'),
+        'c_value': params.IntParam(singleStep=1, minimum=-100, maximum=100, label='C Value'),
+        'kernel_size': params.IntParam(singleStep=2, minimum=1, maximum=100, label='Kernel Size'),
+        'min_size': params.IntParam(singleStep=1, maximum=1000, label='Minimum Size'),
+        'max_size': params.IntParam(singleStep=1, maximum=1000, value=1000, label='Maximum Size'),
     }
     def function(self, img, thresh_type, blur, size, c_value, kernel_size, min_size, max_size, colour):
         """Adaptive threshold segmentation of image
@@ -472,14 +395,13 @@ class ThresholdSegmentation(BaseSegmentation):
                     if min_size < cv2.contourArea(contour) < max_size]
         return contours
 
-
 class BaseStack(QtWidgets.QWidget):
     """An abstract stack of function"""
     valueChanged = QtCore.pyqtSignal(dict)
     results_changed = QtCore.pyqtSignal(int)
 
     functions = {}
-    method_order = {}
+    method_graph = {}
 
     @property
     def enabled(self) -> bool:
@@ -530,8 +452,8 @@ class BaseStack(QtWidgets.QWidget):
         self.files = {}
         self.outputs = {function: None
                         for function in self.functions}
-        self.thread = DisplayWorkerThread(self)
         #self.valueChanged.connect(self.thread.recompute)
+        self.connect_methods()
 
     def __call__(self, arg):
         """Takes an input image `arg`, and runs a computation.
@@ -544,7 +466,6 @@ class BaseStack(QtWidgets.QWidget):
             self.outputs[function_name] = arg = function(arg)
         return arg
 
-
     def create_gui(self):
         """Creates the widget of this method stack"""
         layout = QtWidgets.QVBoxLayout()
@@ -556,7 +477,7 @@ class BaseStack(QtWidgets.QWidget):
             self.widgets[widget].valueChanged.connect(self.emit)
             layout.addWidget(self.widgets[widget])
         box = QtWidgets.QGroupBox('Other options')
-        widgets = functions.ChoiceParam(
+        widgets = params.ChoiceParam(
             choices=self.widgets.keys(),
             labels=(self.widgets[widget].title for widget in self.widgets),
             label='Display Image'
@@ -578,6 +499,15 @@ class BaseStack(QtWidgets.QWidget):
         output_control.addWidget(QtWidgets.QPushButton('CSV output'), 1, 0)
         layout.addWidget(box)
 
+    def connect_methods(self):
+        """Connects the methods for this function stack"""
+        for edge in self.method_graph:
+            print(self.functions)
+            start_node = self.functions[edge]
+            end = self.method_graph[edge]
+            end_node = self.functions[end]
+            start_node.results_changed.connect(end_node.run)
+
     def emit(self):
         """Emits a valueChanged signal"""
         self.valueChanged.emit(self.values)
@@ -589,7 +519,6 @@ class BaseStack(QtWidgets.QWidget):
             function: self.widgets[function].values
             for function in self.widgets
         }
-
 
 class ThresholdStack(BaseStack):
     """A function stack for adaptive thresholds"""
