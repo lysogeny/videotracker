@@ -9,8 +9,8 @@ from PyQt5.QtWidgets import (QWidget, QMainWindow, QAction, #QMessageBox,
                              QGridLayout, QDockWidget, QVBoxLayout, QBoxLayout,
                              QLabel, QSizePolicy, QScrollArea, QSlider,
                              QHBoxLayout, QSpinBox, QColorDialog)
-from PyQt5.QtGui import QIcon, QPalette, QImage, QPixmap, QColor
-from PyQt5.QtCore import Qt, pyqtSignal
+
+from PyQt5 import QtWidgets, QtCore, QtGui
 
 import cv2
 
@@ -20,12 +20,12 @@ from .video import Video
 class ColorButton(QPushButton):
     """A button, that when pushed, returns a colour"""
 
-    valueChanged = pyqtSignal(str)
+    valueChanged = QtCore.pyqtSignal(str)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._color = QColor()
-        self.dialog = QColorDialog()
+        self._color = QtGui.QColor()
+        self.dialog = QtGui.QColorDialog()
         self.clicked.connect(self.pick_color)
         self.setStyleSheet("color: {}".format(self.value()))
         self.setText(self.value())
@@ -34,7 +34,7 @@ class ColorButton(QPushButton):
         """Sets the button colour value"""
         # pylint: disable=invalid-name
         # Unfortunately, Qt5 naming is awful.
-        self._color = QColor(value)
+        self._color = QtGui.QColor(value)
         self.valueChanged.emit(self.value())
         self.setStyleSheet("color: {}".format(self.value()))
         self.setText(self.value())
@@ -47,6 +47,26 @@ class ColorButton(QPushButton):
         """Pick the colour using the dialog"""
         self._color = self.dialog.getColor(self._color)
         self.setValue(self._color.name())
+
+class FancyScrollArea(QScrollArea):
+    """A better QScrollArea"""
+    def wheelEvent(self, event):
+        delta_y = event.angleDelta().y()
+        delta_x = event.angleDelta().x()
+        x = self.horizontalScrollBar().value()
+        y = self.verticalScrollBar().value()
+        #print("x: %d, deltax: %d, y: %d, deltay: %d" % (x, delta_x, y, delta_y))
+        if event.modifiers() == QtCore.Qt.ShiftModifier:
+            # Zoom, but for this it means doing nothing.
+            pass
+        elif event.modifiers() == QtCore.Qt.ControlModifier:
+            # Flipped
+            self.verticalScrollBar().setValue(y-delta_x)
+            self.horizontalScrollBar().setValue(x-delta_y)
+        else:
+            # Ordinary
+            self.verticalScrollBar().setValue(y-delta_y)
+            self.horizontalScrollBar().setValue(x-delta_x)
 
 class ImageView(QWidget):
     """The view area.
@@ -68,7 +88,7 @@ class ImageView(QWidget):
     # total and that is very managable.
     # pylint: disable=too-many-instance-attributes
 
-    pos_changed = pyqtSignal(int)
+    pos_changed = QtCore.pyqtSignal(int)
     # Frame that we have changed to
 
     @property
@@ -91,7 +111,7 @@ class ImageView(QWidget):
         """The image displayed, as a numpy array.
 
         Setting this variable causes:
-            - An image to be converted to a QImage and then displayed in the
+            - An image to be converted to a QtGui.QImage and then displayed in the
               ScrollArea
             - Spinboxes, Sliders to be enabled
             - If this is the first image to be loaded, scale set to 1.0
@@ -105,8 +125,8 @@ class ImageView(QWidget):
         self.frame = frame
         height, width, channels = frame.shape
         bytes_per_line = channels*width
-        qimg = QImage(frame.data, width, height, bytes_per_line, QImage.Format_RGB888)
-        self.image_lab.setPixmap(QPixmap.fromImage(qimg))
+        qimg = QtGui.QImage(frame.data, width, height, bytes_per_line, QtGui.QImage.Format_RGB888)
+        self.image_lab.setPixmap(QtGui.QPixmap.fromImage(qimg))
         if first:
             self.scale = 1.0
         else:
@@ -168,6 +188,14 @@ class ImageView(QWidget):
         self.frame = None
         self._enabled = False
 
+    def wheelEvent(self, event):
+        """Overload the wheelevent"""
+        if event.modifiers() == QtCore.Qt.ShiftModifier:
+            # Zooms
+            portion = (event.angleDelta().y() / 8 / 360) + 1
+            self.scale *= portion
+            #print("{} * {} = {}".format(old, portion, self.scale))
+
     def create_gui(self):
         """Creates the image view gui
 
@@ -182,14 +210,15 @@ class ImageView(QWidget):
         Internally all Widgets in the HBox are linked.
         """
         self.image_lab = QLabel()
-        self.image_lab.setBackgroundRole(QPalette.Dark)
+        self.image_lab.setBackgroundRole(QtGui.QPalette.Dark)
         self.image_lab.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
         self.image_lab.setScaledContents(True)
-        self.scrollarea = QScrollArea()
-        self.scrollarea.setBackgroundRole(QPalette.Dark)
+        self.scrollarea = FancyScrollArea()
+        self.scrollarea.setBackgroundRole(QtGui.QPalette.Dark)
         self.scrollarea.setWidget(self.image_lab)
+        self.scrollarea.installEventFilter(self)
         self.slidelabel = QLabel(self.lab_text_template.format(0, 0))
-        self.slider = QSlider(Qt.Horizontal, enabled=False,
+        self.slider = QSlider(QtCore.Qt.Horizontal, enabled=False,
                               minimum=0, maximum=0, sliderMoved=lambda x: setattr(self, 'pos', x),
                               valueChanged=lambda x: setattr(self, 'pos', x))
         self.sbox = QSpinBox(maximum=0, enabled=False,
@@ -257,7 +286,7 @@ class SideDock(QDockWidget):
     # issue.
     # pylint: disable=too-many-instance-attributes
 
-    started = pyqtSignal(bool)
+    started = QtCore.pyqtSignal(bool)
 
     @property
     def input(self) -> str:
