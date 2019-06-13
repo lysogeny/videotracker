@@ -36,3 +36,16 @@ def change_cursor(value: bool):
         QtWidgets.qApp.setOverrideCursor(QtCore.Qt.WaitCursor)
     else:
         QtWidgets.qApp.restoreOverrideCursor()
+
+def get_image(file_handle):
+    if not os.path.exists(file_handle):
+        raise FileNotFoundError
+    img = cv2.imread(file_handle)
+    if img is not None:
+        return img
+    cap = cv2.VideoCapture(file_handle)
+    ok, img = cap.read()
+    cap.release()
+    if ok:
+        return img
+    raise ValueError('File is not readable by OpenCV. Are you sure it contains images?')

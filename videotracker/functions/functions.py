@@ -11,7 +11,7 @@ from .abc import ImageInput, ImageOutput, DataInput, DataOutput, BaseFunction
 # Unlike the previous parts, these can inherit from QWidget.
 # That is becauset they are not constructed in class attributes.
 
-class GaussianBlur(ImageOutput, ImageInput, BaseFunction):
+class GaussianBlur(BaseFunction, ImageOutput, ImageInput):
     """Blurs Gauss"""
     title = 'Gaussian Blur'
     params = {

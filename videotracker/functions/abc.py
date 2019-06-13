@@ -25,11 +25,8 @@ class BaseFunction(QtWidgets.QGroupBox):
     valueChanged = QtCore.pyqtSignal(dict)
     # The results_changed signal is emitted after self.results is assigned.
 
-    def get_input_signals(self):
-        raise NotImplementedError
-
-    def get_output_signals(self):
-        raise NotImplementedError
+    def get_input_signals(self, names=False):
+        return []
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -44,9 +41,9 @@ class BaseFunction(QtWidgets.QGroupBox):
         # We need to connect the valuechanges to a function that recomputes things.
         self.valueChanged.connect(self.__call__)
         # We also connect the input being changed to the function's call
-        input_signals = self.get_input_signals()
+        input_signals = list(self.get_input_signals())
         for input_signal in input_signals:
-            input_signal.connect(self.__call__)
+            input_signal.connect(self.thread.start)
 
     def create_gui(self):
         """Creates the widget of this function"""
@@ -93,7 +90,7 @@ class BaseFunction(QtWidgets.QGroupBox):
         """A function"""
         raise NotImplementedError
 
-class BaseInput:
+class BaseInput(QtCore.QObject):
     """Abstract mixin input class"""
 
     #input_changed = QtCore.pyqtSignal()
@@ -119,13 +116,6 @@ class BaseInput:
                         yield attribute
                     else:
                         yield attr
-        #return [
-        #    getattr(self, attribute)
-        #    for attribute in dir(self)
-        #    if isinstance(getattr(self, attribute), QtCore.pyqtBoundSignal)
-        #    or isinstance(getattr(self, attribute), QtCore.pyqtSignal)
-        #    and attribute.startswith('input_')
-        #]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -135,7 +125,7 @@ class BaseInput:
             self._input['_'.join(input_signal.split('_')[1:])] = None
             #getattr(self, input_signal).connect(self.input_changed.emit)
 
-class BaseOutput:
+class BaseOutput(QtCore.QObject):
     """Abstract mixin output class"""
 
     #output_changed = QtCore.pyqtSignal()
@@ -161,13 +151,6 @@ class BaseOutput:
                         yield attribute
                     else:
                         yield attr
-        #return [
-        #    getattr(self, attribute)
-        #    for attribute in dir(self)
-        #    if isinstance(getattr(self, attribute), QtCore.pyqtBoundSignal)
-        #    or isinstance(getattr(self, attribute), QtCore.pyqtSignal)
-        #    and attribute.startswith('output_')
-        #]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -230,4 +213,3 @@ class DataOutput(BaseOutput):
     def input_data(self, value):
         self_output['data'] = value
         self.output_data_changed.emit()
-

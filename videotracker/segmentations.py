@@ -37,8 +37,10 @@ import cv2
 
 from .video import Video
 from . import contours
+from . import helpers
 from . import functions
 from .functions import params
+from .functions import abc
 
 class SegmentationThread(QtCore.QThread):
     """A thread for segmentations
@@ -414,9 +416,6 @@ class BaseStack(QtWidgets.QWidget):
         for widget in self.widgets:
             self.widgets[widget].setEnabled(value)
 
-    def function(self) -> Callable:
-        """Returns the function"""
-
     @property
     def input(self) -> str:
         """The input file"""
@@ -450,8 +449,6 @@ class BaseStack(QtWidgets.QWidget):
         self.widgets = {}
         self.create_gui()
         self.files = {}
-        self.outputs = {function: None
-                        for function in self.functions}
         #self.valueChanged.connect(self.thread.recompute)
         self.connect_methods()
 
@@ -502,11 +499,17 @@ class BaseStack(QtWidgets.QWidget):
     def connect_methods(self):
         """Connects the methods for this function stack"""
         for edge in self.method_graph:
-            print(self.functions)
-            start_node = self.functions[edge]
-            end = self.method_graph[edge]
-            end_node = self.functions[end]
-            start_node.results_changed.connect(end_node.run)
+            # Special names: IMAGE, DATA, INPUT
+            try:
+                start_node = self.functions[edge]
+                end = self.method_graph[edge]
+                end_node = self.functions[end]
+                ins = start_node.get_inputs()
+                ine = end_node.get_inputs()
+                print("{} → {}".format(end_node, start_node))
+                end_node.output_image_changed.connect(lambda: setattr(start_node, 'input_image', end_node.output_image))
+            except KeyError:
+                pass
 
     def emit(self):
         """Emits a valueChanged signal"""
@@ -519,6 +522,19 @@ class BaseStack(QtWidgets.QWidget):
             function: self.widgets[function].values
             for function in self.widgets
         }
+
+class ShortStack(BaseStack, abc.ImageInput, abc.ImageOutput):
+    functions = {
+        'gaussian_blur': functions.GaussianBlur,
+        'adaptive_threshold': functions.AdaptiveThreshold,
+        'morphology': functions.Morphology,
+    }
+    method_graph = {
+        'OUTPUT': 'morphology',
+        'morphology': 'adaptive_threshold',
+        'adaptive_threshold': 'gaussian_blur',
+        'gaussian_blur': 'INPUT',
+    }
 
 class ThresholdStack(BaseStack):
     """A function stack for adaptive thresholds"""
@@ -537,14 +553,14 @@ class ThresholdStack(BaseStack):
     # method_graph describes how the signal's and slots from the different
     # functions are connected.
     method_graph = {
-        'image': 'draw_contours',
-        'data': 'size_filter',
-        'draw_contours': ('input', 'size_filter'),
+        'IMAGE': 'draw_contours',
+        'DATA': 'size_filter',
+        'draw_contours': ('INPUT', 'size_filter'),
         'size_filter': 'contour_extract',
         'contour_extract': 'morphology',
         'morphology': 'adaptive_threshold',
         'adaptive_threshold': 'gaussian_blur',
-        'gaussian_blur': 'input'
+        'gaussian_blur': 'INPUT'
     }
 
 class NullStack(BaseStack):

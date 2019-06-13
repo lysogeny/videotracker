@@ -25,7 +25,7 @@ class ColorButton(QPushButton):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._color = QtGui.QColor()
-        self.dialog = QtGui.QColorDialog()
+        self.dialog = QColorDialog()
         self.clicked.connect(self.pick_color)
         self.setStyleSheet("color: {}".format(self.value()))
         self.setText(self.value())
@@ -195,7 +195,6 @@ class ImageView(QWidget):
             portion = (event.angleDelta().y() / 8 / 360) + 1
             self.scale *= portion
             #print("{} * {} = {}".format(old, portion, self.scale))
-
     def create_gui(self):
         """Creates the image view gui
 
