@@ -504,8 +504,6 @@ class BaseStack(QtWidgets.QWidget):
                 start_node = self.functions[edge]
                 end = self.method_graph[edge]
                 end_node = self.functions[end]
-                ins = start_node.get_inputs()
-                ine = end_node.get_inputs()
                 print("{} → {}".format(end_node, start_node))
                 end_node.output_image_changed.connect(lambda: setattr(start_node, 'input_image', end_node.output_image))
             except KeyError:
@@ -523,7 +521,7 @@ class BaseStack(QtWidgets.QWidget):
             for function in self.widgets
         }
 
-class ShortStack(BaseStack, abc.ImageInput, abc.ImageOutput):
+class ShortStack(BaseStack):
     functions = {
         'gaussian_blur': functions.GaussianBlur,
         'adaptive_threshold': functions.AdaptiveThreshold,

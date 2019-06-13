@@ -11,6 +11,60 @@ class WorkerThread(QtCore.QThread):
     def run(self):
         self.parent.function()
 
+class BaseIO(QtCore.QObject):
+    """Abstract data"""
+
+    changed = QtCore.pyqtSignal()
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._data = None
+
+    @property
+    def data(self):
+        """The data of this object"""
+        return self._data
+    @data.setter
+    def data(self, value):
+        self._data = value
+        self.changed.emit()
+
+class Input(BaseIO):
+    """Input data"""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Source should be a Output
+        self._source = None
+
+    @property
+    def source(self):
+        """The source for this input. Where to copy things from?
+
+        This should be an object of class Output, or anything else that has a `data` attribute.
+        """
+        return self._source
+    @source.setter
+    def source(self, value):
+        try:
+            self._source.changed.disconnect(self.get)
+            # Both exceptions indicate the connection did not exist previously,
+            # thus pass.
+        except TypeError:
+            pass
+        except AttributeError:
+            pass
+        self._source = value
+        self._source.changed.connect(self.get)
+
+    def get(self):
+        """Sets the data"""
+        print('data copied')
+        self.data = self.source.data
+
+class Output(BaseIO):
+    """Output data"""
+
 class BaseFunction(QtWidgets.QGroupBox):
     """Abstract function.
 
@@ -24,9 +78,32 @@ class BaseFunction(QtWidgets.QGroupBox):
 
     valueChanged = QtCore.pyqtSignal(dict)
     # The results_changed signal is emitted after self.results is assigned.
+    @property
+    def io(self):
+        """Gets attributes of self which inherit BaseIO"""
+        return {
+            attribute: getattr(self, attribute)
+            for attribute in dir(self)
+            if not attribute in ('io', 'outputs', 'inputs')
+            and isinstance(getattr(self, attribute), BaseIO)
+        }
+        #out = {}
+        #for attribute in dir(self):
+        #    if attribute in ('io', 'outputs', 'inputs'):
+        #        pass
+        #    elif isinstance(getattr(self, attribute), BaseIO):
+        #        out[attribute].append(getattr(self, attribute))
+        #return out
 
-    def get_input_signals(self, names=False):
-        return []
+    @property
+    def outputs(self):
+        """Gets attributes of self which are outputs"""
+        return {attribute: getattr(self, attribute) for attribute in self.io if isinstance(getattr(self, attribute), Output)}
+
+    @property
+    def inputs(self):
+        """Gets attributes of self which are inputs"""
+        return {attribute: getattr(self, attribute) for attribute in self.io if isinstance(getattr(self, attribute), Input)}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -41,9 +118,8 @@ class BaseFunction(QtWidgets.QGroupBox):
         # We need to connect the valuechanges to a function that recomputes things.
         self.valueChanged.connect(self.__call__)
         # We also connect the input being changed to the function's call
-        input_signals = list(self.get_input_signals())
-        for input_signal in input_signals:
-            input_signal.connect(self.thread.start)
+        for input_signal in self.inputs.values():
+            input_signal.changed.connect(self.thread.start)
 
     def create_gui(self):
         """Creates the widget of this function"""
@@ -90,126 +166,9 @@ class BaseFunction(QtWidgets.QGroupBox):
         """A function"""
         raise NotImplementedError
 
-class BaseInput(QtCore.QObject):
-    """Abstract mixin input class"""
-
-    #input_changed = QtCore.pyqtSignal()
-
-    def get_input_signals(self, names=False):
-        """Returns all input signals of this class"""
-        for attribute in dir(self):
-            try:
-                attr = getattr(self, attribute)
-            except AttributeError:
-                # Attribute error is sometimes raised because the object may be
-                # in a strange state of semi-constructedness
-                pass
-            except KeyError:
-                # Key error is raised when the underlying property does not have
-                # a dict properly assigned yet. I don't always have a proper dict
-                pass
-            else:
-                is_signal = isinstance(attr, QtCore.pyqtBoundSignal) or isinstance(attr, QtCore.pyqtSignal)
-                is_input = attribute.startswith('input_')
-                if is_input and is_signal:
-                    if names:
-                        yield attribute
-                    else:
-                        yield attr
-
+class ImageToImage(BaseFunction):
+    """Image in, Image out"""
     def __init__(self, *args, **kwargs):
+        self.input_image = Input()
+        self.output_image = Output()
         super().__init__(*args, **kwargs)
-        self._input = {}
-        input_signals = self.get_input_signals(names=True)
-        for input_signal in input_signals:
-            self._input['_'.join(input_signal.split('_')[1:])] = None
-            #getattr(self, input_signal).connect(self.input_changed.emit)
-
-class BaseOutput(QtCore.QObject):
-    """Abstract mixin output class"""
-
-    #output_changed = QtCore.pyqtSignal()
-
-    def get_output_signals(self, names=False):
-        """Returns all output signals of this class"""
-        for attribute in dir(self):
-            try:
-                attr = getattr(self, attribute)
-            except AttributeError:
-                # Attribute error is sometimes raised because the object may be
-                # in a strange state of semi-constructedness
-                pass
-            except KeyError:
-                # Key error is raised when the underlying property does not have
-                # a dict properly assigned yet. I don't always have a proper dict
-                pass
-            else:
-                is_signal = isinstance(attr, QtCore.pyqtBoundSignal) or isinstance(attr, QtCore.pyqtSignal)
-                is_output = attribute.startswith('output_')
-                if is_output and is_signal:
-                    if names:
-                        yield attribute
-                    else:
-                        yield attr
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._output = {}
-        output_signals = self.get_output_signals(names=True)
-        for output_signal in output_signals:
-            self._output['_'.join(output_signal.split('_')[1:])] = None
-            #getattr(self, output_signal).connect(self.output_changed.emit)
-
-class ImageOutput(BaseOutput):
-    """A mixable output image class"""
-
-    output_image_changed = QtCore.pyqtSignal()
-
-    @property
-    def output_image(self):
-        """The output image. Setting will emit output_image_changed"""
-        return self._output['image']
-    @output_image.setter
-    def output_image(self, value):
-        self._output['image'] = value
-        self.output_image_changed.emit()
-
-class ImageInput(BaseInput):
-    """A mixin input image class"""
-
-    input_image_changed = QtCore.pyqtSignal()
-
-    @property
-    def input_image(self):
-        """The input image. Setting will emit input_image_changed"""
-        return self._input['image']
-    @input_image.setter
-    def input_image(self, value):
-        self._input['image'] = value
-        self.input_image_changed.emit()
-
-class DataInput(BaseInput):
-    """A mixin input data class"""
-    input_data_changed = QtCore.pyqtSignal()
-
-    @property
-    def input_data(self):
-        """The input data"""
-        return self._input['data']
-    @input_data.setter
-    def input_data(self, value):
-        self._input['data'] = value
-        self.input_data_changed.emit()
-
-class DataOutput(BaseOutput):
-    """A mixin output data class"""
-    output_data_changed = QtCore.pyqtSignal()
-
-    @property
-    def output_data(self):
-        """The output data"""
-        return self._output['data']
-    @output_data.setter
-    def input_data(self, value):
-        self_output['data'] = value
-        self.output_data_changed.emit()
