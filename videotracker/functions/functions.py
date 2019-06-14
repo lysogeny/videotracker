@@ -20,7 +20,8 @@ class GaussianBlur(ImageToImage):
     # These are the variables that define the out/input
     def function(self):
         """Blurs Gaussianly"""
-        self.output_image.data = cv2.GaussianBlur(self.input_image.data, (self.values['size'], self.values['size']), 0)
+        self.output_image.data = cv2.GaussianBlur(self.input_image.data,
+                                                  (self.values['size'], self.values['size']), 0)
 
 class AdaptiveThreshold(ImageToImage):
     """Computes an adaptive threshold"""
@@ -38,7 +39,6 @@ class AdaptiveThreshold(ImageToImage):
         """Applies an adaptive threshold"""
         # This is an example of a somewhat simple function, most of the inputs
         # are mapped directly to the function itself.
-        print(self.input_image.data)
         self.output_image.data = cv2.adaptiveThreshold(self.input_image.data, maxValue=255,
                                                        thresholdType=cv2.THRESH_BINARY_INV,
                                                        **self.values)
@@ -70,7 +70,7 @@ class SizeFilter(ImageToImage):
         'minimum': params.IntParam(singleStep=1, maximum=1000, label='Minimum Size'),
         'maximum': params.IntParam(singleStep=1, maximum=1000, value=1000, label='Maximum Size'),
     }
-    def function(self, inputs):
+    def function(self):
         """Filters contours by enclosed area"""
         self.output_data.data = [i for i in self.input_data.data
                                  if self.values['minimum'] <= cv2.contourArea(i) <= self.values['maximum']]
@@ -82,9 +82,11 @@ class DrawContours(ImageToImage):
         'color': params.ColorParam(),
         'thickness': params.IntParam(minimum=1, maximum=100, label='Thickness')
     }
-    def function(self, inputs):
+    def function(self):
         """Draws contours"""
-        self.output_image.data = cv2.drawContours(self.input_image.data, self.input_data, **self.values)
+        self.output_image.data = cv2.drawContours(self.input_image.data,
+                                                  self.input_data.data,
+                                                  **self.values)
 
 class Morphology(ImageToImage):
     """Morphological operations"""
@@ -105,5 +107,7 @@ class Morphology(ImageToImage):
     }
     def function(self):
         """Morphological Operations"""
-        kernel = cv2.getStructuringElement(self.values['shape'], (self.values['ksize'], self.values['ksize']))
-        self.output_image.data = cv2.morphologyEx(self.input_image.data, self.values['operation'], kernel)
+        kernel = cv2.getStructuringElement(self.values['shape'],
+                                           (self.values['ksize'], self.values['ksize']))
+        self.output_image.data = cv2.morphologyEx(self.input_image.data,
+                                                  self.values['operation'], kernel)

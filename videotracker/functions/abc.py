@@ -9,7 +9,9 @@ class WorkerThread(QtCore.QThread):
         self.parent = parent
 
     def run(self):
+        """Runs the parent's method called function"""
         self.parent.function()
+        print('Thread {} finished'.format(type(self.parent).__name__))
 
 class BaseIO(QtCore.QObject):
     """Abstract data"""
@@ -28,13 +30,17 @@ class BaseIO(QtCore.QObject):
     def data(self, value):
         self._data = value
         self.changed.emit()
+        print("VALUE of {} CHANGED TO {}".format(type(self).__name__, value))
+    @data.deleter
+    def data(self):
+        print("SOMEONE IS DELETING ME, HELP")
+        del self._data
 
 class Input(BaseIO):
     """Input data"""
-
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Source should be a Output
+        # Source should be an Output
         self._source = None
 
     @property
@@ -59,8 +65,9 @@ class Input(BaseIO):
 
     def get(self):
         """Sets the data"""
-        print('data copied')
-        self.data = self.source.data
+        print('COPY {} from {}'.format(self.source.data, self.source))
+        if self.source:
+            self.data = self.source.data
 
 class Output(BaseIO):
     """Output data"""
@@ -73,7 +80,6 @@ class BaseFunction(QtWidgets.QGroupBox):
     """
     title: str
     params: dict
-    inputs = {}
     #function: Callable
 
     valueChanged = QtCore.pyqtSignal(dict)
@@ -81,29 +87,27 @@ class BaseFunction(QtWidgets.QGroupBox):
     @property
     def io(self):
         """Gets attributes of self which inherit BaseIO"""
+        #pylint: disable=invalid-name
         return {
             attribute: getattr(self, attribute)
             for attribute in dir(self)
             if not attribute in ('io', 'outputs', 'inputs')
             and isinstance(getattr(self, attribute), BaseIO)
         }
-        #out = {}
-        #for attribute in dir(self):
-        #    if attribute in ('io', 'outputs', 'inputs'):
-        #        pass
-        #    elif isinstance(getattr(self, attribute), BaseIO):
-        #        out[attribute].append(getattr(self, attribute))
-        #return out
 
     @property
     def outputs(self):
         """Gets attributes of self which are outputs"""
-        return {attribute: getattr(self, attribute) for attribute in self.io if isinstance(getattr(self, attribute), Output)}
+        return {attribute: getattr(self, attribute)
+                for attribute in self.io
+                if isinstance(getattr(self, attribute), Output)}
 
     @property
     def inputs(self):
         """Gets attributes of self which are inputs"""
-        return {attribute: getattr(self, attribute) for attribute in self.io if isinstance(getattr(self, attribute), Input)}
+        return {attribute: getattr(self, attribute)
+                for attribute in self.io
+                if isinstance(getattr(self, attribute), Input)}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -112,8 +116,7 @@ class BaseFunction(QtWidgets.QGroupBox):
         self.result = None
         # The thread of the function
         self.thread = WorkerThread(self)
-        self.thread.finished.connect(lambda: print(self.title + ' Thread finished'))
-        self.thread.setObjectName(self.title)
+        self.thread.setObjectName(type(self).__name__)
         #self.thread.finished.connect(self.extract)
         # We need to connect the valuechanges to a function that recomputes things.
         self.valueChanged.connect(self.__call__)
@@ -147,16 +150,12 @@ class BaseFunction(QtWidgets.QGroupBox):
             for param in self.widgets
         }
 
-    def run(self, signal):
-        result = signal.sender().result
-        self.inputs[0] = result
-        self()
-
     def __call__(self):
         """Runs this function's computation
 
         Currently missing are bits for running this in a separate thread.
         """
+        print("data is {}".format(self.input_image.data))
         self.thread.start()
 
     def extract(self):

@@ -401,6 +401,7 @@ class BaseStack(QtWidgets.QWidget):
     """An abstract stack of function"""
     valueChanged = QtCore.pyqtSignal(dict)
     results_changed = QtCore.pyqtSignal(int)
+    view_changed = QtCore.pyqtSignal()
 
     functions = {}
     method_graph = {}
@@ -447,31 +448,33 @@ class BaseStack(QtWidgets.QWidget):
         super().__init__(*args, **kwargs)
         self._enabled = False
         self.widgets = {}
-        self.create_gui()
         self.files = {}
-        #self.valueChanged.connect(self.thread.recompute)
+        self.create_gui()
+        #self.create_methods()
         self.connect_methods()
+        self._inputs = {
+            fun: self.functions[fun].input_image for fun in self.functions
+        }
+        self._outputs = {
+            fun: self.functions[fun].output_image for fun in self.functions
+        }
+        self.view = self._outputs['morphology']
+        self.display()
 
-    def __call__(self, arg):
-        """Takes an input image `arg`, and runs a computation.
-
-        Returns a resulting image, and stores all intermediary results in the
-        outputs dict.
-        """
-        for function_name in self.method_order:
-            function = self.method_order[function_name]
-            self.outputs[function_name] = arg = function(arg)
-        return arg
+    @property
+    def outputs(self):
+        """Output of all variables here"""
+        return {output: self._outputs[output].data for output in self._outputs}
 
     def create_gui(self):
         """Creates the widget of this method stack"""
         layout = QtWidgets.QVBoxLayout()
         self.setLayout(layout)
-        self.widgets = {
+        self.functions = self.widgets = {
             function: self.functions[function]() for function in self.functions
         }
         for widget in self.widgets:
-            self.widgets[widget].valueChanged.connect(self.emit)
+            self.widgets[widget].valueChanged.connect(self.valueChanged.emit)
             layout.addWidget(self.widgets[widget])
         box = QtWidgets.QGroupBox('Other options')
         widgets = params.ChoiceParam(
@@ -495,23 +498,41 @@ class BaseStack(QtWidgets.QWidget):
         output_control.addWidget(QtWidgets.QPushButton('CSV output'))
         output_control.addWidget(QtWidgets.QPushButton('CSV output'), 1, 0)
         layout.addWidget(box)
+        self.image_choice = widgets['widget']
+        self.image_choice.valueChanged.connect(self.display)
+
+    def display(self):
+        """Changes displays or something, idk"""
+        self.view = self._outputs[self.image_choice.value()]
+        self.view_changed.emit()
+
+    def create_methods(self):
+        """Constructs methods for this method"""
+        for method in self.functions:
+            self.functions[method] = self.functions[method]()
 
     def connect_methods(self):
         """Connects the methods for this function stack"""
         for edge in self.method_graph:
             # Special names: IMAGE, DATA, INPUT
-            try:
-                start_node = self.functions[edge]
-                end = self.method_graph[edge]
-                end_node = self.functions[end]
-                print("{} → {}".format(end_node, start_node))
-                end_node.output_image_changed.connect(lambda: setattr(start_node, 'input_image', end_node.output_image))
-            except KeyError:
-                pass
-
-    def emit(self):
-        """Emits a valueChanged signal"""
-        self.valueChanged.emit(self.values)
+            end = self.method_graph[edge]
+            print("{} → {}".format(end, edge))
+            if edge == 'output_image':
+                # Output image is mapped to this guy's output
+                self.output_image = self.functions[end].output_image
+            elif edge == 'output_data':
+                self.output_data = self.functions[end].output_data
+            elif end == 'input_image':
+                # Input image is mapped to this guy's input
+                self.input_image = self.functions[edge].input_image
+            else:
+                # Other edges are mapped between edges
+                connection_end = self.functions[edge].input_image
+                connection_start = self.functions[end].output_image
+                #print('{} → {}'.format(connection_end, connection_start))
+                connection_end.source = connection_start
+            # Connection is made
+            #print('{} → {}'.format(connection_start, connection_end))
 
     @property
     def values(self) -> dict:
@@ -522,16 +543,17 @@ class BaseStack(QtWidgets.QWidget):
         }
 
 class ShortStack(BaseStack):
+    """A short stack that does not output data, but only images"""
     functions = {
         'gaussian_blur': functions.GaussianBlur,
         'adaptive_threshold': functions.AdaptiveThreshold,
         'morphology': functions.Morphology,
     }
     method_graph = {
-        'OUTPUT': 'morphology',
+        'output_image': 'morphology',
         'morphology': 'adaptive_threshold',
         'adaptive_threshold': 'gaussian_blur',
-        'gaussian_blur': 'INPUT',
+        'gaussian_blur': 'input_image',
     }
 
 class ThresholdStack(BaseStack):

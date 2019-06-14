@@ -122,6 +122,12 @@ class ImageView(QWidget):
     @image.setter
     def image(self, frame):
         first = self.frame is None
+        try:
+            dim = frame.ndim
+        except AttributeError:
+            dim = None
+        if dim == 2:
+            frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
         self.frame = frame
         height, width, channels = frame.shape
         bytes_per_line = channels*width
@@ -180,6 +186,27 @@ class ImageView(QWidget):
         self.slider.setEnabled(value)
         self.sbox.setEnabled(value)
 
+    @property
+    def source(self):
+        """Source image to copy on get call"""
+        return self._source
+    @source.setter
+    def source(self, value):
+        try:
+            self._source.changed.disconnect(self.get)
+        except TypeError:
+            pass
+        except AttributeError:
+            pass
+        self._source = value
+        self._source.changed.connect(self.get)
+
+    def get(self):
+        """Gets new data"""
+        print('data copied to image device')
+        self.image = self.source.data
+
+
     def __init__(self):
         super().__init__()
         self.lab_text_template = '{:}/{:}'
@@ -187,6 +214,7 @@ class ImageView(QWidget):
         self.pos_max = 0
         self.frame = None
         self._enabled = False
+        self._source = None
 
     def wheelEvent(self, event):
         """Overload the wheelevent"""
