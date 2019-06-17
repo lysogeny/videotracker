@@ -440,7 +440,6 @@ class BaseStack(QtWidgets.QWidget):
     def load_frame(self):
         """Loads current frame"""
         self.input_image.data = self.video.frame
-        import ipdb; ipdb.set_trace()  # XXX BREAKPOINT
 
 
     def __init__(self, *args, input_file=None, csv_file=None, vid_file=None, **kwargs):
