@@ -11,7 +11,6 @@ class WorkerThread(QtCore.QThread):
     def run(self):
         """Runs the parent's method called function"""
         self.parent.function()
-        print('Thread {} finished'.format(type(self.parent).__name__))
 
 class BaseIO(QtCore.QObject):
     """Abstract data"""
@@ -30,11 +29,6 @@ class BaseIO(QtCore.QObject):
     def data(self, value):
         self._data = value
         self.changed.emit()
-        print("VALUE of {} CHANGED TO {}".format(type(self).__name__, value))
-    @data.deleter
-    def data(self):
-        print("SOMEONE IS DELETING ME, HELP")
-        del self._data
 
 class Input(BaseIO):
     """Input data"""
@@ -65,7 +59,6 @@ class Input(BaseIO):
 
     def get(self):
         """Sets the data"""
-        print('COPY {} from {}'.format(self.source.data, self.source))
         if self.source:
             self.data = self.source.data
 
@@ -155,7 +148,6 @@ class BaseFunction(QtWidgets.QGroupBox):
 
         Currently missing are bits for running this in a separate thread.
         """
-        print("data is {}".format(self.input_image.data))
         self.thread.start()
 
     def extract(self):

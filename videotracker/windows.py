@@ -129,12 +129,6 @@ class MainView(QtWidgets.QMainWindow):
         for action in self.actions['&View']:
             action.setEnabled(value)
         self.dock.go_button.setEnabled(value)
-        if value is not None:
-            #self.options.values_changed.connect(self.options.thread.set_options)
-            self.options.thread.start()
-        else:
-            #helpers.disconnect(self.options.values_changed)
-            self.options.thread.stop()
 
     @property
     def image_control(self) -> bool:
@@ -205,7 +199,7 @@ class MainView(QtWidgets.QMainWindow):
         self.options = None
         self.video_file = in_vid
         if self.video_file:
-            self.video_load()
+            self.input = self.video_file
         self.csv = csv
         self.vid = vid
         self.module_load()
@@ -225,14 +219,6 @@ class MainView(QtWidgets.QMainWindow):
         self.image = widgets.ImageView()
         self.setCentralWidget(self.image)
         self.resize(800, 500)
-
-    def draw_result(self):
-        """Draw result onto the image device
-
-        This is achieved by setting the image.image to the thread's view value
-        """
-        if self.dock.preview:
-            self.image.image = self.options.thread.view
 
     def create_actions(self):
         """Creates all actions"""
@@ -348,12 +334,14 @@ class MainView(QtWidgets.QMainWindow):
             print('User chose new module {}'.format(module))
             self.module_load(module)
 
-    def module_load(self, method=segmentations.ThresholdStack):
+    def module_load(self, method=segmentations.ShortStack):
         """Creates a dock with the given method"""
         # Delete old options
         # Create new options
         self.options = method()
         self.dock.module = self.options
+        self.image.source = self.options.view
+        self.image.source = self.options.view
         #self.options.thread.finished.connect(lambda: setattr(self, 'running', False))
         #self.options.thread.loop_complete.connect(lambda: setattr(self, 'running', False))
         #self.options.thread.computing.connect(helpers.change_cursor)

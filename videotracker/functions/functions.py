@@ -20,7 +20,7 @@ class GaussianBlur(ImageToImage):
     # These are the variables that define the out/input
     def function(self):
         """Blurs Gaussianly"""
-        self.output_image.data = cv2.GaussianBlur(self.input_image.data,
+        self.output_image.data = cv2.GaussianBlur(cv2.cvtColor(self.input_image.data, cv2.COLOR_BGR2GRAY),
                                                   (self.values['size'], self.values['size']), 0)
 
 class AdaptiveThreshold(ImageToImage):

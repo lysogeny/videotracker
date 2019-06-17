@@ -29,18 +29,13 @@ then used by __call__ to calculate the next result.
 import json
 import csv
 
-from typing import Callable
-
 from PyQt5 import QtWidgets, QtCore
-
 import cv2
 
 from .video import Video
 from . import contours
-from . import helpers
 from . import functions
 from .functions import params
-from .functions import abc
 
 class SegmentationThread(QtCore.QThread):
     """A thread for segmentations
@@ -399,11 +394,13 @@ class ThresholdSegmentation(BaseSegmentation):
 
 class BaseStack(QtWidgets.QWidget):
     """An abstract stack of function"""
-    valueChanged = QtCore.pyqtSignal(dict)
-    results_changed = QtCore.pyqtSignal(int)
-    view_changed = QtCore.pyqtSignal()
+    valueChanged = QtCore.pyqtSignal(dict) # The values of the widgets have changed
+    output_changed = QtCore.pyqtSignal(int)  # Computational output(s) have changed
+    view_changed = QtCore.pyqtSignal() # The chosen view has changed.
 
-    functions = {}
+    # Methods to be used and description of connections between methods to be
+    # made.
+    methods = {}
     method_graph = {}
 
     @property
@@ -418,45 +415,52 @@ class BaseStack(QtWidgets.QWidget):
             self.widgets[widget].setEnabled(value)
 
     @property
-    def input(self) -> str:
+    def input_file(self) -> str:
         """The input file"""
-        return self.files['input']
-    @input.setter
-    def input(self, value: str):
-        self.files['input'] = value
-        self.thread.input = value
+        return self._input_file
+    @input_file.setter
+    def input_file(self, value: str):
+        # pylint: disable=attribute-defined-outside-init
+        # Dear pylint, this is implicit. Yours truly, me.
+        self._input_file = value
+        if value is not None:
+            self.video = Video(value)
+            self.load_frame()
+        # This might cause problems, depending on what the behaviour of the
+        # video object was.
 
     @property
-    def csv(self) -> str:
-        """The output CSV file"""
-        return self.files['csv']
-    @csv.setter
-    def csv(self, value: str):
-        self.files['csv'] = value
-        self.thread.csv = value
+    def pos(self) -> int:
+        return self.video.position
+    @pos.setter
+    def pos(self, value: int):
+        self.video.position = value
+        self.load_frame()
 
-    @property
-    def vid(self) -> str:
-        """The output Video file"""
-        return self.files['vid']
-    @vid.setter
-    def vid(self, value: str):
-        self.files['vid'] = value
-        self.thread.vid = value
+    def load_frame(self):
+        """Loads current frame"""
+        self.input_image.data = self.video.frame
+        import ipdb; ipdb.set_trace()  # XXX BREAKPOINT
 
-    def __init__(self, *args, **kwargs):
+
+    def __init__(self, *args, input_file=None, csv_file=None, vid_file=None, **kwargs):
         super().__init__(*args, **kwargs)
+        # These two are no longer properties, as they don't need anything to
+        # happen on setting or loading.
+        self.video = None
+        self.csv_file: str = csv_file
+        self.vid_file: str = vid_file
+        self.input_file: str = input_file
         self._enabled = False
         self.widgets = {}
-        self.files = {}
         self.create_gui()
         #self.create_methods()
         self.connect_methods()
         self._inputs = {
-            fun: self.functions[fun].input_image for fun in self.functions
+            fun: self.methods[fun].input_image for fun in self.methods
         }
         self._outputs = {
-            fun: self.functions[fun].output_image for fun in self.functions
+            fun: self.methods[fun].output_image for fun in self.methods
         }
         self.view = self._outputs['morphology']
         self.display()
@@ -470,8 +474,8 @@ class BaseStack(QtWidgets.QWidget):
         """Creates the widget of this method stack"""
         layout = QtWidgets.QVBoxLayout()
         self.setLayout(layout)
-        self.functions = self.widgets = {
-            function: self.functions[function]() for function in self.functions
+        self.methods = self.widgets = {
+            function: self.methods[function]() for function in self.methods
         }
         for widget in self.widgets:
             self.widgets[widget].valueChanged.connect(self.valueChanged.emit)
@@ -508,8 +512,8 @@ class BaseStack(QtWidgets.QWidget):
 
     def create_methods(self):
         """Constructs methods for this method"""
-        for method in self.functions:
-            self.functions[method] = self.functions[method]()
+        for method in self.methods:
+            self.methods[method] = self.methods[method]()
 
     def connect_methods(self):
         """Connects the methods for this function stack"""
@@ -519,16 +523,16 @@ class BaseStack(QtWidgets.QWidget):
             print("{} → {}".format(end, edge))
             if edge == 'output_image':
                 # Output image is mapped to this guy's output
-                self.output_image = self.functions[end].output_image
+                self.output_image = self.methods[end].output_image
             elif edge == 'output_data':
-                self.output_data = self.functions[end].output_data
+                self.output_data = self.methods[end].output_data
             elif end == 'input_image':
                 # Input image is mapped to this guy's input
-                self.input_image = self.functions[edge].input_image
+                self.input_image = self.methods[edge].input_image
             else:
                 # Other edges are mapped between edges
-                connection_end = self.functions[edge].input_image
-                connection_start = self.functions[end].output_image
+                connection_end = self.methods[edge].input_image
+                connection_start = self.methods[end].output_image
                 #print('{} → {}'.format(connection_end, connection_start))
                 connection_end.source = connection_start
             # Connection is made
@@ -544,7 +548,7 @@ class BaseStack(QtWidgets.QWidget):
 
 class ShortStack(BaseStack):
     """A short stack that does not output data, but only images"""
-    functions = {
+    methods = {
         'gaussian_blur': functions.GaussianBlur,
         'adaptive_threshold': functions.AdaptiveThreshold,
         'morphology': functions.Morphology,
@@ -559,7 +563,7 @@ class ShortStack(BaseStack):
 class ThresholdStack(BaseStack):
     """A function stack for adaptive thresholds"""
     # List of functions that this class has
-    functions = {
+    methods = {
         'gaussian_blur': functions.GaussianBlur,
         'adaptive_threshold': functions.AdaptiveThreshold,
         'morphology': functions.Morphology,
