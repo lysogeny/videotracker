@@ -20,12 +20,12 @@ AppSupportURL={#MyAppURL}
 AppUpdatesURL={#MyAppURL}
 DefaultDirName={autopf}\{#MyAppName}
 DisableProgramGroupPage=yes
-LicenseFile=C:\Users\Jooa\Code\videotracker\LICENSE
+LicenseFile=C:\Users\Jooa\Code\videotracker\devtools\build\windows\LICENSE.rtf
 ; Remove the following line to run in administrative install mode (install for all users.)
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
 OutputDir=C:\Users\Jooa\Code\videotracker\setup
-OutputBaseFilename=mysetup
+OutputBaseFilename=videotracker_setup_windows64
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
