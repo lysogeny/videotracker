@@ -17,6 +17,71 @@ import cv2
 from . import helpers
 from .video import Video
 
+class BaseFileObject:
+    """A base widget for videotracker objects
+
+    Provides several things:
+        - csv property for csv files
+        - vid proprety for video files
+        - input property for input files
+    """
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.files = {
+            'in': None,
+            'csv': None,
+            'vid': None,
+            'config': None,
+        }
+        self.widgets = {}
+
+    @property
+    def in_file(self) -> str:
+        """Input file
+
+        None indicates no file, a string is a file handle.
+        """
+        return self.files['in']
+    @in_file.setter
+    def in_file(self, value: str):
+        self.files['in'] = value
+        for widget in self.widgets:
+            try:
+                self.widgets[widget].in_file = value
+            except AttributeError:
+                pass
+
+    @property
+    def csv_file(self) -> str:
+        """CSV output file
+
+        None indicates no file, a string is a file handle.
+        """
+        return self.files['csv']
+    @csv_file.setter
+    def csv_file(self, value: str):
+        self.files['csv'] = value
+        for widget in self.widgets:
+            try:
+                self.widgets[widget].csv_file = value
+            except AttributeError:
+                pass
+
+    @property
+    def vid_file(self) -> str:
+        """Video output file
+
+        None indicates no file, a string is a file handle.
+        """
+        return self.files['vid']
+    @vid_file.setter
+    def vid_file(self, value: str):
+        self.files['vid'] = value
+        for widget in self.widgets:
+            try:
+                self.widgets[widget].vid_file = value
+            except AttributeError:
+                pass
 class ColorButton(QPushButton):
     """A button, that when pushed, returns a colour"""
 
@@ -51,6 +116,9 @@ class ColorButton(QPushButton):
 class FancyScrollArea(QScrollArea):
     """A better QScrollArea"""
     def wheelEvent(self, event):
+        """Wheel events overloaded to allow zooming and sideways scrolls"""
+        # pylint: disable=invalid-name
+        # x is snek_case, just a very very short snek.
         delta_y = event.angleDelta().y()
         delta_x = event.angleDelta().x()
         x = self.horizontalScrollBar().value()
@@ -172,7 +240,7 @@ class ImageView(QWidget):
         self.slidelabel.setText(self.lab_text_template.format(value, self.pos_max))
         self.pos_changed.emit(value)
 
-    def set_position(self, value: int):
+    def set_pos(self, value: int):
         """Sets the position. Used as a slot for other widgets"""
         self.pos = value
 
@@ -223,6 +291,7 @@ class ImageView(QWidget):
             portion = (event.angleDelta().y() / 8 / 360) + 1
             self.scale *= portion
             #print("{} * {} = {}".format(old, portion, self.scale))
+
     def create_gui(self):
         """Creates the image view gui
 
@@ -259,6 +328,7 @@ class ImageView(QWidget):
         self.layout.addWidget(self.scrollarea)
         self.layout.addLayout(slidebox)
         self.setLayout(self.layout)
+        self.setMinimumSize(512, 512)
 
     def reset(self):
         """Reset the widget.
@@ -295,41 +365,23 @@ class ImageView(QWidget):
         self.scale = min(should_width/current_width * self.scale,
                          should_height/current_height * self.scale)
 
-class SideDock(QDockWidget):
+class SideDock(QDockWidget, BaseFileObject):
     """Sidebar dock area
 
     Consists of an upper custom widget (defined by custom in construction) and a
     lower constant widget. The lower widget adjust various output file
     properties, and offers controls for starting/stopping.
     """
-    # Again, pylint disagrees on instance attributes.
     # To my count there is seven-ish properly public attributes.
     # A further seven attributes define various UI elements which need to be
     # accessed frequently by property setters and getters.
     # As such I don't think there is much room for improvement
-    # Arguably, custom could be it's own module, with the layouting done here
-    # done in the main window.
-    # Perhaps I will change to that, but right now that appears to be a minor
-    # issue.
     # pylint: disable=too-many-instance-attributes
 
     started = QtCore.pyqtSignal(bool)
 
     @property
-    def input(self) -> str:
-        """Input file
-
-        None indicates no input file.
-        This attribute propagates to the sidebar module.
-        """
-        return self.files['input']
-    @input.setter
-    def input(self, value: str):
-        self.files['input'] = value
-        self.module.input = value
-
-    @property
-    def csv(self) -> str:
+    def csv_file(self) -> str:
         """CSV output. Either string or None.
 
         None indicates that no output shall be made, string indicates a file
@@ -338,23 +390,21 @@ class SideDock(QDockWidget):
         enables/disables the csv_button.
         The checkbox will not emit signals for that change.
         """
-        return self.files['csv']
-    @csv.setter
-    def csv(self, value: str):
+        return self.files['csv'] if self.csv_cbox.checkState() else None
+    @csv_file.setter
+    def csv_file(self, value: str):
         self.csv_cbox.blockSignals(True)
+        self.module.csv_file = value
         if value is not None:
             self.csv_cbox.setCheckState(2)
-            self.files_persist['csv'] = value
-            #self.custom.thread.csv_file = value
+            self.files['csv'] = value
         else:
             self.csv_cbox.setCheckState(0)
-            #self.custom.thread.csv_file = None
-        self.files['csv'] = value
         self.csv_button.setEnabled(value is not None)
         self.csv_cbox.blockSignals(False)
 
     @property
-    def vid(self) -> str:
+    def vid_file(self) -> str:
         """Boolean indicating vid output
 
         None indicates that no output shall be made, string indicates a file
@@ -363,20 +413,29 @@ class SideDock(QDockWidget):
         enables/disables the vid_button.
         The checkbox will not emit signals for that change.
         """
-        return self.files['vid']
-    @vid.setter
-    def vid(self, value: str):
+        return self.files['vid'] if self.vid_cbox.checkState() else None
+    @vid_file.setter
+    def vid_file(self, value: str):
         self.vid_cbox.blockSignals(True)
+        self.module.vid_file = value
         if value is not None:
             self.vid_cbox.setCheckState(2)
-            self.files_persist['vid'] = value
-            #self.custom.thread.vid_file = value
+            self.files['vid'] = value
         else:
             self.vid_cbox.setCheckState(0)
-            #self.custom.thread.vid_file = None
-        self.files['vid'] = value
         self.vid_button.setEnabled(value is not None)
         self.vid_cbox.blockSignals(False)
+
+    @property
+    def in_file(self) -> str:
+        """Input file"""
+        return self.files['in']
+    @in_file.setter
+    def in_file(self, value: str):
+        self.files['in'] = value
+        if self.module is not None:
+            self.module.in_file = value
+
 
     @property
     def preview(self):
@@ -404,11 +463,10 @@ class SideDock(QDockWidget):
             widget.setEnabled(not self._running)
         if self.module is not None:
             self.module.enabled = not value
+            self.module.running = value
         #self.custom.thread.running = value
         # This might seem strange and effectless, but it does reset the buttons
         # to the correct state.
-        self.vid = self.vid
-        self.csv = self.csv
         # Disables csv and video selections buttons
         self.csv_button.setEnabled(not value)
         self.vid_button.setEnabled(not value)
@@ -433,16 +491,27 @@ class SideDock(QDockWidget):
             self._module.deleteLater()
         #del self._module
 
+    @property
+    def enabled(self) -> bool:
+        """Enabledness of the widgets"""
+        return self._enabled
+    @enabled.setter
+    def enabled(self, value: bool):
+        self._enabled = value
+        for widget in self.disabled_group:
+            widget.setEnabled(value)
+        self.module.enabled = value
+
     def __init__(self, module=None):
         super().__init__('Options')
         self.setFeatures(QDockWidget.DockWidgetMovable)
         self.files = {'csv': None, 'vid': None}
-        self.files_persist = {'csv': '', 'vid': ''}
         self._module = None
         self.create_gui()
-        self.running = False
         if module:
             self.module = module
+        self.running = False
+        self._enabled = True
 
     def emit_go(self):
         """Emits a go signal"""
@@ -456,9 +525,9 @@ class SideDock(QDockWidget):
         If successful will change self.csv_file
         """
         file_name = QFileDialog.getSaveFileName(self, 'CSV File Save Location',
-                                                self.csv, '*.csv')
+                                                self.csv_file, '*.csv')
         if file_name[0]:
-            self.csv = file_name[0]
+            self.csv_file = file_name[0]
 
     def pick_vid(self):
         """Picks video output location
@@ -467,23 +536,23 @@ class SideDock(QDockWidget):
         If successful will change self.vid_file
         """
         file_name = QFileDialog.getSaveFileName(self, 'Video save location',
-                                                self.csv, '*.mp4')
+                                                self.vid_file, '*.mp4')
         if file_name[0]:
-            self.vid = file_name[0]
+            self.vid_file = file_name[0]
 
     def set_vid(self, change: int):
         """Sets the video output to the change value"""
         if bool(change):
-            self.vid = self.files_persist['vid']
+            self.vid_file = self.files['vid']
         else:
-            self.vid = None
+            self.vid_file = None
 
     def set_csv(self, change: int):
         """Sets the csv output to the change value"""
         if bool(change):
-            self.csv = self.files_persist['csv']
+            self.csv_file = self.files['csv']
         else:
-            self.csv = None
+            self.csv_file = None
 
     def create_gui(self):
         """Creates the dock gui
@@ -533,3 +602,4 @@ class SideDock(QDockWidget):
         widget = QWidget()
         widget.setLayout(layout)
         self.setWidget(widget)
+        self.disabled_group = [self.csv_cbox, self.csv_button, self.vid_cbox, self.vid_button]

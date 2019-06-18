@@ -2,7 +2,7 @@
 
 import os
 import inspect
-import importlib
+#import importlib
 
 from PyQt5 import QtWidgets, QtCore, QtGui
 
@@ -71,7 +71,7 @@ class ModuleDialog(QtWidgets.QDialog):
         """Returns a result, True or False, indicating if okay or cancel was chosen"""
         return self._result
 
-class MainView(QtWidgets.QMainWindow):
+class MainView(QtWidgets.QMainWindow, widgets.BaseFileObject):
     """A main view
 
     This main view has four principal states consisting of a combination of
@@ -86,6 +86,27 @@ class MainView(QtWidgets.QMainWindow):
 
     TITLE = 'pyqt-videotracker'
     actions = {}
+
+    def __init__(self, csv_file=None, vid_file=None, in_file=None, config=None, debug=True):
+        super().__init__()
+        self.state = {
+            'running': False,
+            'loaded': False,
+            'image_control': False
+        }
+        self.debug = debug
+        self.create_gui()
+        self.create_actions()
+        self.setWindowTitle(self.TITLE)
+        self.options = None
+        self.module_load()
+        # Todo: load module config
+        self.in_file = in_file
+        self.csv_file = csv_file
+        self.vid_file = vid_file
+        if self.in_file is not None:
+            self.input_load()
+        print(self.files)
 
     @property
     def has_module(self) -> bool:
@@ -112,12 +133,10 @@ class MainView(QtWidgets.QMainWindow):
             start_action.setIcon(QtGui.QIcon.fromTheme('media-playback-start'))
             start_action.setText('Start')
         # Disable option controls
-        self.dock.running = value
-        # Set mode of subsidiary elements
-        # Set the frame control to be handled by the sidebar, allowing it to
-        # step to the next frames.
+        for widget in self.widgets:
+            self.widgets[widget].enabled = not value
         self.image_control = not value
-        self.options.thread.running = value
+        self.dock.running = value
 
     @property
     def loaded(self) -> bool:
@@ -142,67 +161,46 @@ class MainView(QtWidgets.QMainWindow):
     def image_control(self, value: bool):
         self.state['image_control'] = value
         # Reconnect signals
-        helpers.disconnect(self.options.thread.frame_changed)
+        helpers.disconnect(self.options.pos_changed)
         helpers.disconnect(self.image.pos_changed)
         if value:
-            self.image.pos_changed.connect(self.compute_image)
+            self.image.pos_changed.connect(self.options.set_pos)
         else:
-            self.options.thread.frame_changed.connect(self.image.set_position)
+            self.options.pos_changed.connect(self.image.set_pos)
         self.image.enabled = value
 
     @property
-    def input(self) -> str:
+    def in_file(self) -> str:
         """A file handle describing the input (str)"""
-        return self.dock.input
-    @input.setter
-    def input(self, value: str):
-        self.dock.input = value
+        return self.files['in'] if self.loaded else None
+    @in_file.setter
+    def in_file(self, value: str):
+        self.files['in'] = value
+        for widget in self.widgets:
+            try:
+                self.widgets[widget].in_file = value
+            except AttributeError:
+                pass
         if value is None:
             self.loaded = False
         else:
             self.loaded = True
 
     @property
-    def csv(self) -> str:
-        """Sets the csv output
-
-        Either None for no ouptut or a string for a file handle where csv will
-        be placed.
-        """
-        return self.dock.csv
-    @csv.setter
-    def csv(self, value: str):
-        self.dock.csv = value
+    def vid_file(self) -> str:
+        return self.dock.vid_file
+    @vid_file.setter
+    def vid_file(self, value: str):
+        self.dock.vid_file = value
+        self.files['vid'] = value
 
     @property
-    def vid(self) -> str:
-        """Sets the vid output
-
-        Either None for no ouptut or a string for a file handle where video will
-        be placed.
-        """
-        return self.dock.vid
-    @vid.setter
-    def vid(self, value: str):
-        self.dock.vid = value
-
-    def __init__(self, csv=None, vid=None, in_vid=None):
-        super().__init__()
-        self.state = {
-            'running': False,
-            'loaded': False,
-            'image_control': False
-        }
-        self.create_gui()
-        self.create_actions()
-        self.setWindowTitle(self.TITLE)
-        self.options = None
-        self.video_file = in_vid
-        if self.video_file:
-            self.input = self.video_file
-        self.csv = csv
-        self.vid = vid
-        self.module_load()
+    def csv_file(self) -> str:
+        return self.dock.csv_file
+    @csv_file.setter
+    def csv_file(self, value: str):
+        self.dock.csv_file = value
+        self.files['csv'] = value
 
     def create_gui(self):
         """Creates the GUI"""
@@ -219,12 +217,13 @@ class MainView(QtWidgets.QMainWindow):
         self.image = widgets.ImageView()
         self.setCentralWidget(self.image)
         self.resize(800, 500)
+        self.widgets = {
+            'image': self.image,
+            'dock': self.dock,
+        }
 
     def create_actions(self):
-        """Creates all actions"""
-        # pylint: disable=no-self-use
-        # No clue why pylint thinks that this could be a function while it is
-        # clearly an abstracted method.
+        """Creates all actions and places them into menus and bars"""
         self.actions = {
             '&File': [
                 QtWidgets.QAction(QtGui.QIcon.fromTheme('document-open'), 'Open...',
@@ -233,6 +232,10 @@ class MainView(QtWidgets.QMainWindow):
                 QtWidgets.QAction(QtGui.QIcon.fromTheme('window-new'), 'Module...',
                                   statusTip='Loads a tracking module',
                                   triggered=self.module_pick),
+                QtWidgets.QAction(QtGui.QIcon.fromTheme('process-stop'), 'Break...',
+                                  statusTip='Inserts a breakpoint', shortcut='Del',
+                                  triggered=self.breakpoint,
+                                  enabled=self.debug),
             ],
             '&View': [
                 QtWidgets.QAction(QtGui.QIcon.fromTheme('zoom-in'), 'Zoom in',
@@ -289,7 +292,7 @@ class MainView(QtWidgets.QMainWindow):
             '&Help': [
                 QtWidgets.QAction(QtGui.QIcon.fromTheme('help-about'), 'About Qt',
                                   statusTip='Help, I am stuck in a GUI factory',
-                                  triggered=QtWidgets.qApp.aboutQt)
+                                  triggered=QtWidgets.qApp.aboutQt),
             ]
         }
         for menu in self.actions:
@@ -301,30 +304,35 @@ class MainView(QtWidgets.QMainWindow):
                 if menu not in ('&Help') and not action.icon().isNull():
                     self.toolbar.addAction(action)
 
+    def breakpoint(self):
+        """This is a breakpoint"""
+        import ipdb; ipdb.set_trace()  # XXX BREAKPOINT
+
     def input_pick(self):
         """Spawn a video picking dialog"""
-        file_name = QtWidgets.QFileDialog.getOpenFileName(self, 'Open file', self.video_file)
+        file_name = QtWidgets.QFileDialog.getOpenFileName(self, 'Open file', self.vid_file)
         if file_name[0]:
-            self.video_file = file_name[0]
             self.input_load(file_name[0])
 
     def input_load(self, video_file=None):
         """Loads a video file"""
-        if video_file is not None:
-            self.video_file = video_file
         self.image.pos = 0 # ImageViewer gets a new position
-        #print(video_file)
-        #print(self.video_file)
-        self.image.pos_max = helpers.video_max_frame(video_file)
+        if video_file is None:
+            test_file = self.in_file
+        else:
+            test_file = video_file
+        if test_file is not None:
+            self.image.pos_max = helpers.video_max_frame(test_file)
         # ImageViewer gets a new max_position
         # Input is defined, CSV and video output files are guessed.
         # All of these propagate into the subwidgets.
-        file_tokenised = os.path.splitext(self.video_file)
-        self.input = self.video_file
-        self.csv = file_tokenised[0] + '_output' + '.csv'
-        self.vid = file_tokenised[0] + '_output' + file_tokenised[1]
-        self.setWindowTitle(self.TITLE + ' ' + self.video_file)
-        self.statusbar.showMessage('Loaded file {}'.format(self.video_file))
+        if video_file is not None:
+            self.in_file = video_file
+        file_tokenised = os.path.splitext(self.in_file)
+        self.csv_file = f'{file_tokenised[0]}_output.csv'
+        self.vid_file = f'{file_tokenised[0]}_output{file_tokenised[1]}'
+        self.setWindowTitle(f'{self.TITLE} {self.in_file}')
+        self.statusbar.showMessage(f'Loaded file {self.in_file}')
 
     def module_pick(self):
         """Spawns a picker dialog for modules"""
@@ -338,10 +346,11 @@ class MainView(QtWidgets.QMainWindow):
         """Creates a dock with the given method"""
         # Delete old options
         # Create new options
-        self.options = method()
+        self.options = method() # Method is constructed
         self.dock.module = self.options
-        self.image.source = self.options.view
-        self.image.source = self.options.view
+        self.options.view_changed.connect(lambda: setattr(self.image, 'image', self.options.view.data))
+        self.options.output_changed.connect(lambda: setattr(self.image, 'image', self.options.view.data))
+        #self.image.source = self.options.view
         #self.options.thread.finished.connect(lambda: setattr(self, 'running', False))
         #self.options.thread.loop_complete.connect(lambda: setattr(self, 'running', False))
         #self.options.thread.computing.connect(helpers.change_cursor)

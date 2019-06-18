@@ -5,6 +5,8 @@ A Video object abstracts the videofile.
 
 from typing import Tuple
 
+from PyQt5 import QtCore
+
 import cv2
 
 class Video:
@@ -22,13 +24,14 @@ class Video:
         for addressing individual frames instead of getting them in order.
         See methods `frame` and `grab` for more.
     """
-    def __init__(self, file_name: str):
+    def __init__(self, file_name: str = None):
         super().__init__()
         self.stopped = False
         self._frame = None
         self._new = True
         self.file_name = file_name
-        self.capture = cv2.VideoCapture(self.file_name)
+        if self.file_name is not None:
+            self.capture = cv2.VideoCapture(self.file_name)
 
     @property
     def position(self) -> int:
@@ -136,3 +139,17 @@ class Video:
 
     def __repr__(self):
         return '<Video at {}>'.format(self.file_name)
+
+class VideoThread(QtCore.QThread, Video):
+    """Gets a frame in a thread"""
+    frame_loaded = QtCore.pyqtSignal(int)
+
+    def __init__(self, file_name, *args, **kwargs):
+        super().__init__(file_name=file_name, *args, **kwargs)
+        self.setTitle('VideoCaptureThread')
+        self.capture.release()
+        del self.capture
+
+    def run(self):
+        """Runs the event loopy loop"""
+        self.capture = cv2.VideoCapture(self.file_name)

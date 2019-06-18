@@ -109,6 +109,8 @@ class BaseFunction(QtWidgets.QGroupBox):
         self.result = None
         # The thread of the function
         self.thread = WorkerThread(self)
+        self.thread.started.connect(lambda: print(self.title + ' started'))
+        self.thread.finished.connect(lambda: print(self.title + ' finished'))
         self.thread.setObjectName(type(self).__name__)
         #self.thread.finished.connect(self.extract)
         # We need to connect the valuechanges to a function that recomputes things.
@@ -144,10 +146,7 @@ class BaseFunction(QtWidgets.QGroupBox):
         }
 
     def __call__(self):
-        """Runs this function's computation
-
-        Currently missing are bits for running this in a separate thread.
-        """
+        """Runs this function's computation"""
         self.thread.start()
 
     def extract(self):
