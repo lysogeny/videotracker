@@ -15,7 +15,6 @@ from PyQt5 import QtWidgets, QtCore, QtGui
 import cv2
 
 from . import helpers
-from .video import Video
 
 class BaseFileObject:
     """A base widget for videotracker objects
@@ -274,7 +273,6 @@ class ImageView(QWidget):
         print('data copied to image device')
         self.image = self.source.data
 
-
     def __init__(self):
         super().__init__()
         self.lab_text_template = '{:}/{:}'
@@ -435,7 +433,6 @@ class SideDock(QDockWidget, BaseFileObject):
         self.files['in'] = value
         if self.module is not None:
             self.module.in_file = value
-
 
     @property
     def preview(self):

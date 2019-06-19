@@ -5,9 +5,11 @@ A Video object abstracts the videofile.
 
 from typing import Tuple
 
-from PyQt5 import QtCore
+from PyQt5 import QtCore, QtWidgets
 
 import cv2
+
+from .functions import abc
 
 class Video:
     """Video object.
@@ -140,16 +142,51 @@ class Video:
     def __repr__(self):
         return '<Video at {}>'.format(self.file_name)
 
-class VideoThread(QtCore.QThread, Video):
+class VideoThread(QtCore.QThread):
     """Gets a frame in a thread"""
     frame_loaded = QtCore.pyqtSignal(int)
 
     def __init__(self, file_name, *args, **kwargs):
-        super().__init__(file_name=file_name, *args, **kwargs)
-        self.setTitle('VideoCaptureThread')
-        self.capture.release()
-        del self.capture
+        super().__init__(*args, **kwargs)
+        self.setObjectName('VideoCaptureThread')
+        self.file_name = file_name
+        self.capture = None
+        self.frame = None
+        self.current_frame = 0
+        self.output = abc.Output()
+        self.finished.connect(lambda: print('VideoThread finished'))
+        self.started.connect(lambda: print('VideoThread started'))
+
+    @property
+    def pos(self) -> int:
+        """The current frame"""
+        return int(self.capture.get(cv2.CAP_PROP_POS_FRAMES))
+    @pos.setter
+    def pos(self, value: int):
+        self.capture.set(cv2.CAP_PROP_POS_FRAMES, value)
 
     def run(self):
         """Runs the event loopy loop"""
         self.capture = cv2.VideoCapture(self.file_name)
+        self.exec_()
+
+    def set_pos(self, frame: int):
+        """Sets position to frame"""
+        self.pos = frame
+
+    def fetch(self, frame: int = None):
+        """Fetches an image.
+
+        If frame is defined, first sets the position.
+        """
+        if frame is not None:
+            self.pos = frame-1
+        if self.current_frame != frame and frame is not None:
+            # If none, just get the next one. If frame differs from current_frame differs
+            exists, self.frame = self.capture.read()
+            self.current_frame = self.pos
+            if exists:
+                print(f'Loaded frame {self.pos}')
+                self.frame_loaded.emit(self.pos)
+        else:
+            print(f'Did not load {frame} as it is already loaded')

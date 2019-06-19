@@ -10,6 +10,7 @@ from PyQt5 import QtWidgets, QtCore, QtGui
 
 from . import helpers, segmentations, widgets
 
+
 class ModuleDialog(QtWidgets.QDialog):
     """A dialog for choosing a module"""
 
@@ -86,7 +87,6 @@ class MainView(QtWidgets.QMainWindow, widgets.BaseFileObject):
 
     TITLE = 'pyqt-videotracker'
     actions = {}
-
     def __init__(self, csv_file=None, vid_file=None, in_file=None, config=None, debug=True):
         super().__init__()
         self.state = {
@@ -164,7 +164,7 @@ class MainView(QtWidgets.QMainWindow, widgets.BaseFileObject):
         helpers.disconnect(self.options.pos_changed)
         helpers.disconnect(self.image.pos_changed)
         if value:
-            self.image.pos_changed.connect(self.options.set_pos)
+            conn = self.image.pos_changed.connect(self.options.video.fetch, type=QtCore.Qt.QueuedConnection)
         else:
             self.options.pos_changed.connect(self.image.set_pos)
         self.image.enabled = value

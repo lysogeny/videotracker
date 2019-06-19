@@ -84,27 +84,21 @@ class BaseStack(QtWidgets.QWidget):
     def in_file(self, value: str):
         self.files['in'] = value
         if value is not None:
-            self.video = Video(value)
-            #self.video.start()
-            self.load_frame()
+            self.video = VideoThread(value)
+            print(f'VideoCaptureThread: {self.video.currentThread()}')
+            self.video.start()
+            self.video.frame_loaded.connect(self.fetch_image)
+            self.video.fetch(1)
         # This might cause problems, depending on what the behaviour of the
         # video object was.
-
-    def set_pos(self, value: int):
-        """Set position to value"""
-        self.pos = value
 
     @property
     def pos(self) -> int:
         """Position in the video file"""
-        return self.video.position
-    @pos.setter
-    def pos(self, value: int):
-        self.video.position = value
-        self.load_frame()
+        return self.video.pos
 
-    def load_frame(self):
-        """Loads current frame"""
+    def fetch_image(self):
+        """Fetches current frame from video object"""
         self.input_image.data = self.video.frame
 
     def __init__(self, *args, input_file=None, csv_file=None, vid_file=None, **kwargs):
