@@ -29,11 +29,11 @@ then used by __call__ to calculate the next result.
 #import json
 #import csv
 
+import logging
+
 from PyQt5 import QtWidgets, QtCore
-#import cv2
 
 from .video import Video, VideoThread
-#from . import contours
 from . import functions
 from .functions import params
 
@@ -85,7 +85,7 @@ class BaseStack(QtWidgets.QWidget):
         self.files['in'] = value
         if value is not None:
             self.video = VideoThread(value)
-            print(f'VideoCaptureThread: {self.video.currentThread()}')
+            logging.debug('VideoCaptureThread: %s', self.video.currentThread())
             self.video.start()
             self.video.frame_loaded.connect(self.fetch_image)
             self.video.fetch(1)
@@ -180,7 +180,7 @@ class BaseStack(QtWidgets.QWidget):
         for edge in self.method_graph:
             # Special names: IMAGE, DATA, INPUT
             end = self.method_graph[edge]
-            print("{} → {}".format(end, edge))
+            logging.info("{} → {}".format(end, edge))
             if edge == 'output_image':
                 # Output image is mapped to this guy's output
                 self.output_image = self.methods[end].output_image
@@ -193,13 +193,9 @@ class BaseStack(QtWidgets.QWidget):
                 # Other edges are mapped between edges
                 connection_end = self.methods[edge].input_image
                 connection_start = self.methods[end].output_image
-                #print('{} → {}'.format(connection_end, connection_start))
                 connection_end.source = connection_start
             if edge.startswith('output'):
                 getattr(self.methods[end], edge).changed.connect(self.output_changed.emit)
-
-            # Connection is made
-            #print('{} → {}'.format(connection_start, connection_end))
 
     @property
     def values(self) -> dict:

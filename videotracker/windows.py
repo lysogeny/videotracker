@@ -2,10 +2,9 @@
 
 import os
 import inspect
-#import importlib
+import logging
 
 from PyQt5 import QtWidgets, QtCore, QtGui
-
 #import cv2
 
 from . import helpers, segmentations, widgets
@@ -340,7 +339,7 @@ class MainView(QtWidgets.QMainWindow, widgets.BaseFileObject):
         dialog = ModuleDialog()
         if dialog.result:
             module = dialog.value
-            print('User chose new module {}'.format(module))
+            logging.info('User chose new module {}'.format(module))
             self.module_load(module)
 
     def module_load(self, method=segmentations.ShortStack):

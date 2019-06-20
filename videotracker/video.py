@@ -3,10 +3,11 @@
 A Video object abstracts the videofile.
 """
 
+
 from typing import Tuple
+import logging
 
-from PyQt5 import QtCore, QtWidgets
-
+from PyQt5 import QtCore
 import cv2
 
 from .functions import abc
@@ -154,8 +155,8 @@ class VideoThread(QtCore.QThread):
         self.frame = None
         self.current_frame = 0
         self.output = abc.Output()
-        self.finished.connect(lambda: print('VideoThread finished'))
-        self.started.connect(lambda: print('VideoThread started'))
+        self.finished.connect(lambda: logging.info('VideoThread finished'))
+        self.started.connect(lambda: logging.info('VideoThread started'))
 
     @property
     def pos(self) -> int:

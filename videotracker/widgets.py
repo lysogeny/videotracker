@@ -1,7 +1,6 @@
 """Widgets of the video-tracker"""
 
-#import copy
-#from collections import defaultdict
+import logging
 import os
 
 from PyQt5.QtWidgets import (QWidget, QMainWindow, QAction, #QMessageBox,
@@ -122,7 +121,6 @@ class FancyScrollArea(QScrollArea):
         delta_x = event.angleDelta().x()
         x = self.horizontalScrollBar().value()
         y = self.verticalScrollBar().value()
-        #print("x: %d, deltax: %d, y: %d, deltay: %d" % (x, delta_x, y, delta_y))
         if event.modifiers() == QtCore.Qt.ShiftModifier:
             # Zoom, but for this it means doing nothing.
             pass
@@ -270,8 +268,8 @@ class ImageView(QWidget):
 
     def get(self):
         """Gets new data"""
-        print('data copied to image device')
         self.image = self.source.data
+        logging.info('Data copied to ImageView')
 
     def __init__(self):
         super().__init__()
@@ -288,7 +286,6 @@ class ImageView(QWidget):
             # Zooms
             portion = (event.angleDelta().y() / 8 / 360) + 1
             self.scale *= portion
-            #print("{} * {} = {}".format(old, portion, self.scale))
 
     def create_gui(self):
         """Creates the image view gui

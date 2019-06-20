@@ -1,5 +1,7 @@
 """Tools for contours"""
 
+import logging
+
 import cv2
 
 FEATURES = [
@@ -43,7 +45,7 @@ def contour_orientation(contour):
     try:
         return cv2.fitEllipse(contour)[-1]
     except cv2.error as error:
-        print(error)
+        logging.error(error)
         return None
 
 # This dictionary defines function that calculate certain metrics from contours.

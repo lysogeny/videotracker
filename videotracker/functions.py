@@ -110,7 +110,6 @@ class BaseFunction(qwidgets.QGroupBox):
             param: self.inputs[param].widget() for param in self.inputs
         }
         for row, param in enumerate(self.widgets):
-            print(self.widgets)
             sub_widget = self.widgets[param]
             sub_widget['widget'].valueChanged.connect(self.emit)
             layout.addWidget(sub_widget['widget'], row, 0)
@@ -255,7 +254,6 @@ class Stack(qwidgets.QWidget):
         for widget in self.widgets:
             self.widgets[widget].valueChanged.connect(self.emit)
             layout.addWidget(self.widgets[widget])
-            print(self.widgets[widget])
         image_choice = qwidgets.QGridLayout()
         box = qwidgets.QGroupBox('Other options')
         box.setLayout(image_choice)
