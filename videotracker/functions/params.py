@@ -57,13 +57,10 @@ class IntParam(BaseParam):
     singleStep: int = 1
 
 @dataclass
-class FloatParam(BaseParam):
+class FloatParam(IntParam):
     """Integer Parameter"""
     widget_callable: Callable = QtWidgets.QDoubleSpinBox
     label: str = ''
-    minimum: float = 0
-    maximum: float = 100
-    singleStep: float = 1
 
 @dataclass
 class ColorParam(BaseParam):
