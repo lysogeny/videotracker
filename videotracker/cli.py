@@ -29,6 +29,8 @@ parser.add_argument('-m', '--module',
                     help='Loads a specific module')
 parser.add_argument('-d', '--debug', default=False, action='store_true',
                     help='Enables debugging features')
+parser.add_argument('-l', '--log', default='WARN', choices=['CRITICAL', 'ERROR', 'WARNING', 'INFO', 'DEBUG'],
+                    help='Sets the loglevel of Videotracker.')
 
 def pop_exception(*args, **kwargs):
     """Exception will pop up on screen and printed to stdout
