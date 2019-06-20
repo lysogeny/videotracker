@@ -27,6 +27,8 @@ parser.add_argument('-o', '--output',
 parser.add_argument('-m', '--module',
                     nargs='?', default=None,
                     help='Loads a specific module')
+parser.add_argument('-d', '--debug', default=False, action='store_true',
+                    help='Enables debugging features')
 
 def pop_exception(*args, **kwargs):
     """Exception will pop up on screen and printed to stdout

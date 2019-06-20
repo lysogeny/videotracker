@@ -87,7 +87,7 @@ class MainView(QtWidgets.QMainWindow, widgets.BaseFileObject):
 
     TITLE = 'pyqt-videotracker'
     actions = {}
-    def __init__(self, csv_file=None, vid_file=None, in_file=None, config=None, debug=True):
+    def __init__(self, csv_file=None, vid_file=None, in_file=None, config=None, debug=False):
         super().__init__()
         self.state = {
             'running': False,
@@ -106,7 +106,6 @@ class MainView(QtWidgets.QMainWindow, widgets.BaseFileObject):
         self.vid_file = vid_file
         if self.in_file is not None:
             self.input_load()
-        print(self.files)
 
     @property
     def has_module(self) -> bool:
@@ -232,10 +231,6 @@ class MainView(QtWidgets.QMainWindow, widgets.BaseFileObject):
                 QtWidgets.QAction(QtGui.QIcon.fromTheme('window-new'), 'Module...',
                                   statusTip='Loads a tracking module',
                                   triggered=self.module_pick),
-                QtWidgets.QAction(QtGui.QIcon.fromTheme('process-stop'), 'Break...',
-                                  statusTip='Inserts a breakpoint', shortcut='Del',
-                                  triggered=self.breakpoint,
-                                  enabled=self.debug),
             ],
             '&View': [
                 QtWidgets.QAction(QtGui.QIcon.fromTheme('zoom-in'), 'Zoom in',
@@ -295,6 +290,12 @@ class MainView(QtWidgets.QMainWindow, widgets.BaseFileObject):
                                   triggered=QtWidgets.qApp.aboutQt),
             ]
         }
+        if self.debug:
+            action = QtWidgets.QAction(QtGui.QIcon.fromTheme('process-stop'), 'Break...',
+                                       statusTip='Inserts a breakpoint', shortcut='Del',
+                                       triggered=self.breakpoint,
+                                       enabled=self.debug)
+            self.actions['&File'].append(action)
         for menu in self.actions:
             this_menu = self.menubar.addMenu(menu)
             for action in self.actions[menu]:

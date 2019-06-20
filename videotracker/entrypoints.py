@@ -14,6 +14,7 @@ def gui():
     app = QApplication(sys.argv)
     cli.setup_interrupt_handling()
     sys.excepthook = cli.pop_exception
-    widget = windows.MainView(csv_file=args.csv, vid_file=args.output, in_file=args.input)
+    widget = windows.MainView(csv_file=args.csv, vid_file=args.output,
+                              in_file=args.input, debug=args.debug)
     widget.show()
     sys.exit(app.exec_())
