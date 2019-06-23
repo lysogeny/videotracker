@@ -141,7 +141,6 @@ class FileSaveButton(QPushButton):
         """The value of the widget"""
         return self._file
 
-
 class ColorButton(QPushButton):
     """A button, that when pushed, returns a colour"""
 

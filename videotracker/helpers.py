@@ -58,3 +58,29 @@ def get_image(file_handle):
     if ok:
         return img
     raise ValueError('File is not readable by OpenCV. Are you sure it contains images?')
+
+def hex2dict(colour: str):
+    """Convert hex colour to dict"""
+    # pylint: disable=invalid-name
+    # r, g, b, n are perfectly fine and self-explanatory
+    colour = colour.replace('#', '')
+    s = 3 # Subcolours
+    n = len(colour)
+    assert not n % s, f'Colour `{colour}` is malformed'
+    values = {
+        'r': colour[0:int(n/s)], # 0 2 or 0 0
+        'g': colour[int(n/s):int(n/s)*2], # 2 4 or 1 1
+        'b': colour[int(n/s)*2:3*int(n/s)], # 4 6 or 2 2
+    }
+    return {
+        value: int(values[value], 16) for value in values
+    }
+
+def hex2bgr(colour: str):
+    """Convert hex colour to bgr tuple
+
+    For some reason actually has to convert to a RGB tuple to get correct outputs.
+    """
+    # pylint: disable=invalid-name
+    d = hex2dict(colour)
+    return (d['r'], d['g'], d['b'])

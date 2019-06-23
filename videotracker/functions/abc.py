@@ -79,11 +79,12 @@ class FunctionWidget(QtWidgets.QGroupBox):
     """
     valueChanged = QtCore.pyqtSignal(dict)
 
-    def __init__(self, title, params, *args, hidden=False, **kwargs):
+    def __init__(self, title, params, *args, hidden=False, image_out=False, **kwargs):
         super().__init__(*args, **kwargs)
         self.title = title
         self.hidden = hidden
         self.params = params
+        self.image_out = image_out
         self.create_gui()
 
     def create_gui(self):
@@ -163,6 +164,11 @@ class BaseFunction(QtCore.QThread):
                 for attribute in self.io
                 if isinstance(getattr(self, attribute), Input)}
 
+    @property
+    def outputs_image(self):
+        """Does this output images?"""
+        return 'output_image' in dir(self)
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.result = None
@@ -181,7 +187,9 @@ class BaseFunction(QtCore.QThread):
 
     def widget(self):
         """Creates the associated widget and connects it"""
-        widget = FunctionWidget(self.title, self.params, hidden=self.hidden)
+        widget = FunctionWidget(self.title, self.params,
+                                hidden=self.hidden,
+                                image_out=self.outputs_image)
         widget.valueChanged.connect(self.set_values)
         self.values = widget.values
         return widget
@@ -242,4 +250,22 @@ class ImageToImage(BaseFunction):
     def __init__(self, *args, **kwargs):
         self.input_image = Input()
         self.output_image = Output()
+        super().__init__(*args, **kwargs)
+
+class DataToData(BaseFunction):
+    """Data in, Data out"""
+    # pylint: disable=abstract-method
+    # This class is still abstract
+    def __init__(self, *args, **kwargs):
+        self.input_data = Input()
+        self.output_data = Output()
+        super().__init__(*args, **kwargs)
+
+class ImageToData(BaseFunction):
+    """Image in, Data out"""
+    # pylint: disable=abstract-method
+    # This class is still abstract
+    def __init__(self, *args, **kwargs):
+        self.input_image = Input()
+        self.output_data = Output()
         super().__init__(*args, **kwargs)

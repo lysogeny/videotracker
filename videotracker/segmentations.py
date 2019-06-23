@@ -59,7 +59,8 @@ class StackWidget(QtWidgets.QWidget):
         titles = [
             (widget, self.widgets[widget].title)
             for widget in self.widgets
-            if not self.widgets[widget].hidden
+            if self.widgets[widget].image_out
+            #if not self.widgets[widget].hidden
         ]
         im_choice = ImageChoiceWidget(titles)
         self.layout.addWidget(im_choice)
@@ -144,14 +145,16 @@ class BaseStack(QtCore.QThread):
         self.create_methods()
         self.connect_methods()
         self._inputs = {
-            fun: self.methods[fun].input_image for fun in self.methods
-            if hasattr(self.methods[fun], 'input_image')
+            fun: self.methods[fun].inputs for fun in self.methods
         }
         self._outputs = {
-            fun: self.methods[fun].output_image for fun in self.methods
-            if hasattr(self.methods[fun], 'output_image')
+            fun: self.methods[fun].outputs for fun in self.methods
         }
-        self.view = self._outputs['morphology']
+        self.output_views = {
+            output: self._outputs[output]['output_image'] for output in self._outputs
+            if 'output_image' in self._outputs[output]
+        }
+        self.view = self.output_views['morphology']
         if in_file is None:
             self._in_file = None
         else:
@@ -167,27 +170,51 @@ class BaseStack(QtCore.QThread):
             meth.moveToThread(thread)
             thread.start()
 
+    def construct_graph(self):
+        """Reshapes self.method_graph into list of tuples form"""
+        for end in self.method_graph:
+            starts = self.method_graph[end]
+            if isinstance(starts, tuple):
+                for start in starts:
+                    yield (end, start)
+            else:
+                yield (end, starts)
+
+
     def connect_methods(self):
         """Connects the methods for this function stack"""
-        for edge in self.method_graph:
+        for end, start in self.construct_graph():
+            print(f'{start} → {end}')
             # Special names: IMAGE, DATA, INPUT
-            end = self.method_graph[edge]
-            logging.info("Connect: %s → %s", end, edge)
-            if edge == 'output_image':
+            if end == 'output_image':
                 # Output image is mapped to this guy's output
-                self.output_image = self.methods[end].output_image
-            elif edge == 'output_data':
-                self.output_data = self.methods[end].output_data
-            elif end == 'input_image':
+                logging.info('Special `%s` from `%s` mapped to `%s`', end, start, self)
+                self.output_image = self.methods[start].output_image
+            elif end == 'output_data':
+                logging.info('Special `%s` from `%s` mapped to `%s`', end, start, self)
+                self.output_data = self.methods[start].output_data
+            elif start == 'input_image':
                 # Input image is mapped to this guy's input
-                self.input_image = self.methods[edge].input_image
+                logging.info('Special `%s` from `%s` mapped to `%s`', end, start, self)
+                self.input_image = self.methods[end].input_image
+            elif start == 'input_data':
+                logging.info('Special `%s` from `%s` mapped to `%s`', end, start, self)
+                self.input_data = self.methods[end].input_data
             else:
                 # Other edges are mapped between edges
-                connection_end = self.methods[edge].input_image
-                connection_start = self.methods[end].output_image
-                connection_end.source = connection_start
-            if edge.startswith('output'):
-                getattr(self.methods[end], edge).changed.connect(self.output_changed.emit)
+                start_set = {method.split('_')[-1] for method in self.methods[start].outputs.keys()}
+                end_set = {method.split('_')[-1] for method in self.methods[end].inputs.keys()}
+                ## What to connect
+                conn_type = start_set.intersection(end_set)
+                logging.info('There are %i connections possible.', len(conn_type))
+                for connection in conn_type:
+                    connection_start = getattr(self.methods[start], f'output_{connection}')
+                    connection_end = getattr(self.methods[end], f'input_{connection}')
+                    connection_end.source = connection_start
+                    logging.info('Internal `%s` from `%s` mapped to `%s`',
+                                connection, self.methods[start], self.methods[end])
+            if end.startswith('output'):
+                getattr(self.methods[start], end).changed.connect(self.output_changed.emit)
 
     def widget(self):
         """Construct a StackWidget widget"""
@@ -201,7 +228,7 @@ class BaseStack(QtCore.QThread):
 
     def set_view(self, name: str):
         """Sets the view attribute to the output identified by name"""
-        self.view = self._outputs[name]
+        self.view = self.output_views[name]
         #self.view_changed.emit()
 
     @property
@@ -325,6 +352,7 @@ class ThresholdStack(BaseStack):
     """A function stack for adaptive thresholds"""
     # List of functions that this class has
     methods = {
+        'bgr2gray': functions.BGR2Gray,
         'gaussian_blur': functions.GaussianBlur,
         'adaptive_threshold': functions.AdaptiveThreshold,
         'morphology': functions.Morphology,
@@ -340,18 +368,14 @@ class ThresholdStack(BaseStack):
     method_graph = {
         'output_image': 'draw_contours',
         'output_data': 'size_filter',
-        'draw_contours': ('input_image', 'size_filter'),
+        'draw_contours': ('bgr2gray', 'size_filter'),
         'size_filter': 'contour_extract',
         'contour_extract': 'morphology',
         'morphology': 'adaptive_threshold',
         'adaptive_threshold': 'gaussian_blur',
-        'gaussian_blur': 'input_image'
+        'gaussian_blur': 'bgr2gray',
+        'bgr2gray': 'input_image',
     }
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        output_image = abc.Output()
-        output_data = abc.Output()
-        input_image = abc.Input()
 
 class NullStack(BaseStack):
     """A stack that does nothing.

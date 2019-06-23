@@ -1,12 +1,10 @@
 """Functions that can be used to assemble segmentations"""
 
-import collections
-
 import cv2
 
-from .. import video
 from . import params
-from .abc import BaseFunction, ImageToImage, Output, Input
+from .abc import BaseFunction, ImageToImage, DataToData, ImageToData, Output, Input
+from .. import helpers
 
 ### FUNCTIONS ###
 # Unlike the previous parts, these can inherit from QWidget.
@@ -44,7 +42,7 @@ class AdaptiveThreshold(ImageToImage):
                                                        thresholdType=cv2.THRESH_BINARY_INV,
                                                        **self.values)
 
-class Contours(ImageToImage):
+class Contours(ImageToData):
     """Extracts contours"""
     title: str = 'Extract Contours'
     params: dict = {
@@ -62,9 +60,9 @@ class Contours(ImageToImage):
     }
     def function(self):
         """Extracts contours"""
-        self.output_data.data = cv2.findContours(self.input_image.data, **self.values)
+        self.output_data.data = cv2.findContours(self.input_image.data, **self.values)[0]
 
-class SizeFilter(ImageToImage):
+class SizeFilter(DataToData):
     """Provides a method for size filters"""
     title: str = 'Filter by area'
     params: dict = {
@@ -76,18 +74,26 @@ class SizeFilter(ImageToImage):
         self.output_data.data = [i for i in self.input_data.data
                                  if self.values['minimum'] <= cv2.contourArea(i) <= self.values['maximum']]
 
-class DrawContours(ImageToImage):
+class DrawContours(BaseFunction):
     """Draws Contours"""
     title: str = 'Draw Contours'
     params: dict = {
         'color': params.ColorParam(),
         'thickness': params.IntParam(minimum=1, maximum=100, label='Thickness')
     }
+    def __init__(self, *args, **kwargs):
+        self.input_data = Input()
+        self.input_image = Input()
+        self.output_image = Output()
+        super().__init__(*args, **kwargs)
     def function(self):
         """Draws contours"""
-        self.output_image.data = cv2.drawContours(self.input_image.data,
-                                                  self.input_data.data,
-                                                  **self.values)
+        self.output_image.data = cv2.drawContours(
+            cv2.cvtColor(self.input_image.data.copy(), cv2.COLOR_GRAY2BGR),
+            self.input_data.data, -1,
+            color=helpers.hex2bgr(self.values['color']),
+            thickness=self.values['thickness']
+        )
 
 class Morphology(ImageToImage):
     """Morphological operations"""
