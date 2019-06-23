@@ -242,6 +242,36 @@ class ImageView(QWidget):
         self.pos = value
 
     @property
+    def coord_max(self) -> complex:
+        """Maximum coordinates at which the view can be set"""
+        return complex(self.scrollarea.horizontalScrollBar().maximum(),
+                       self.scrollarea.verticalScrollBar().maximum())
+
+    @property
+    def coord_abs(self) -> complex:
+        """Absolute coordinates at which the view can be set"""
+        return complex(self.scrollarea.horizontalScrollBar().value(),
+                       self.scrollarea.verticalScrollBar().value())
+    @coord_abs.setter
+    def coord_abs(self, value: complex):
+        self.scrollarea.horizontalScrollBar().setValue(value.real)
+        self.scrollarea.verticalScrollBar().setValue(value.imag)
+
+    @property
+    def coord(self) -> complex:
+        """Relative Coordinates at which the view is set"""
+        # pylint: disable=invalid-name
+        c = self.coord_abs
+        max_c = self.coord_max
+        if max_c:
+            return c / max_c
+        return 0j
+    @coord.setter
+    def coord(self, value: complex):
+        max_c = self.coord_max
+        self.coord_abs = value * max_c
+
+    @property
     def enabled(self) -> bool:
         """State of the controls"""
         return self._enabled
@@ -280,12 +310,14 @@ class ImageView(QWidget):
         self._enabled = False
         self._source = None
 
-    def wheelEvent(self, event):
+    def wheelEvent(self, event): #pylint: disable=invalid-name # I can't do anything about Qt's naming style
         """Overload the wheelevent"""
         if event.modifiers() == QtCore.Qt.ShiftModifier:
             # Zooms
+            coord_old = self.coord
             portion = (event.angleDelta().y() / 8 / 360) + 1
             self.scale *= portion
+            self.coord = coord_old
 
     def create_gui(self):
         """Creates the image view gui
