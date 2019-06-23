@@ -103,3 +103,16 @@ class ChoiceParam(BaseParam):
         widget.setValue = MethodType(set_data, widget)
         widget.value = widget.currentData
         return dictionary
+
+@dataclass
+class CheckParam(BaseParam):
+    """Checkbox Parameter"""
+    widget_callable: Callable = QtWidgets.QCheckBox
+    label: str = ''
+
+    def widget(self):
+        widget = super().widget()
+        widget['widget'].valueChanged = widget['widget'].stateChanged
+        widget['widget'].value = widget['widget'].checkState
+        widget['widget'].setValue = widget['widget'].setCheckState
+        return widget

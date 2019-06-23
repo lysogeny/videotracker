@@ -18,10 +18,16 @@ FEATURES = [
 def contour_centroid(contour):
     """Computes centroid of a contour"""
     moments = cv2.moments(contour)
-    centre = (
-        int(moments['m10']/moments['m00']),
-        int(moments['m01']/moments['m00'])
-    )
+    try:
+        centre = (
+            int(moments['m10']/moments['m00']),
+            int(moments['m01']/moments['m00'])
+        )
+    except ZeroDivisionError:
+        centre = (
+            None,
+            None
+        )
     return centre
 
 def complex_position(contour):
@@ -58,7 +64,7 @@ FEATURES = {
     'pos': complex_position,
 }
 
-def extract_features(contours, features=('area')):
+def extract_features(contours, extra_features=('area',)):
     """Extracts usual features from contours.
 
     This function gets a list of contours and for each contour computes the
@@ -80,7 +86,8 @@ def extract_features(contours, features=('area')):
             'y': position[1],
         }
         # Other output features are added by calling callables from constant FEATURES.
-        for feature in features:
+        for feature in extra_features:
             features[feature] = FEATURES[feature](contour)
         # Results are appended to he list.
         output.append(features)
+    return output

@@ -33,8 +33,11 @@ dot_graph method to generate a dot language representation of the stack.
 #import csv
 
 import logging
+import csv
 
 from PyQt5 import QtWidgets, QtCore
+
+import cv2
 
 from .video import Video
 from . import functions
@@ -141,10 +144,15 @@ class BaseStack(QtCore.QThread):
         # These two are no longer properties, as they don't need anything to
         # happen on setting or loading.
         self.video = None
-        self.files = {'in': None, 'csv': None, 'vid': None}
+        self.files = {'in': in_file, 'csv': csv_file, 'vid': vid_file}
+        self.csv_file = csv_file
+        self.vid_file = vid_file
         self._running = False
         self._enabled = False
         self._view = None
+        self.csv_writer = None
+        self.csv_connection = None
+        self.video_output = None
         self.create_methods()
         self.connect_methods()
         self._inputs = {
@@ -257,6 +265,7 @@ class BaseStack(QtCore.QThread):
 
     @property
     def view(self):
+        """The view that was chosen by the user."""
         return self._view
     @view.setter
     def view(self, view):
@@ -294,15 +303,65 @@ class BaseStack(QtCore.QThread):
     def running(self, value: bool):
         self._running = value
         if value:
-            self.set_pos(0)
-            self.output_changed.connect(self.segment)
+            self.in_file = self.in_file
+            self.output_image.changed.connect(self.segment)
+            if self.csv_file is not None:
+                self.create_csv_writer()
+            if self.vid_file is not None:
+                self.create_vid_writer()
             self.next()
         else:
-            self.output_changed.disconnect(self.segment)
+            self.output_image.changed.disconnect(self.segment)
+            self.destroy_csv_writer()
+            self.destroy_vid_writer()
+
+    def create_csv_writer(self):
+        """Opens the file at csv_file and starts a dictwriter. Connects output_data"""
+        self.csv_connection = open(self.csv_file, 'w')
+        self.csv_writer = csv.DictWriter(self.csv_connection, fieldnames=self.output_data.fields)
+        self.csv_writer.writeheader()
+        self.output_data.changed.connect(self.write_csv)
+        logging.debug('Created CSV writer %s at %s', self.csv_writer, self.csv_connection)
+
+    def destroy_csv_writer(self):
+        """Removes the csv writer"""
+        if self.csv_file is not None:
+            self.output_data.changed.disconnect(self.write_csv)
+            self.csv_connection.close()
+            logging.debug('CSV output destroyed')
+
+    def write_csv(self):
+        """Writes current output_data row to the csv file"""
+        for row in self.output_data.data:
+            self.csv_writer.writerow(row)
+            logging.debug('Wrote to csv: %s', row)
+
+    def create_vid_writer(self):
+        """Opens the ifle at vid_file and starts a video thing"""
+        self.video_output = cv2.VideoWriter(self.vid_file,
+                                            cv2.VideoWriter_fourcc(*self.video.fourcc),
+                                            self.video.framerate, self.video.resolution)
+        logging.debug('Created video writer %s at %s', self.video_output, self.vid_file)
+        self.output_image.changed.connect(self.write_vid)
+
+    def write_vid(self):
+        """Writes the current output_image to the video file
+
+        Todo: Make videos a separate function
+        """
+        self.video_output.write(self.output_image.data)
+        logging.debug('Wrote video frame')
+
+    def destroy_vid_writer(self):
+        """Closes the video writer"""
+        if self.vid_file:
+            self.video_output.release()
+            self.output_image.changed.disconnect(self.write_vid)
+            logging.debug('Video output destroyed')
 
     def segment(self):
         """Segments. If StopIteration is encountered, stops"""
-        logging.debug('Next frame!')
+        logging.debug('Load frame %i', self.video.position)
         try:
             self.next()
         except StopIteration:
@@ -383,6 +442,7 @@ class ThresholdStack(BaseStack):
         'contour_extract': functions.Contours,
         'size_filter': functions.SizeFilter,
         'draw_contours': functions.DrawContours,
+        'feature_extraction': functions.ExtractPolygonFeatures
     }
     # Description of the dependency tree.
     # Disappointingly, this actually needs to be a graph, because otherwise we
@@ -391,7 +451,8 @@ class ThresholdStack(BaseStack):
     # functions are connected.
     method_graph = {
         'output_image': 'draw_contours',
-        'output_data': 'size_filter',
+        'output_data': 'feature_extraction',
+        'feature_extraction': 'size_filter',
         'draw_contours': ('bgr2gray', 'size_filter'),
         'size_filter': 'contour_extract',
         'contour_extract': 'morphology',

@@ -4,6 +4,7 @@ import logging
 
 from PyQt5 import QtCore, QtWidgets
 
+
 class WorkerThread(QtCore.QThread):
     """A worker thread, that is run by the functions"""
     def __init__(self, parent, *args, **kwargs):
@@ -233,6 +234,7 @@ class BaseFunction(QtCore.QThread):
             if self.isRunning():
                 logging.debug('previously running %s', self.title)
                 #self.terminate()
+                #self.wait()
             logging.debug('Computing %s', self.title)
             self.start()
         else:
@@ -269,3 +271,47 @@ class ImageToData(BaseFunction):
         self.input_image = Input()
         self.output_data = Output()
         super().__init__(*args, **kwargs)
+
+class DataImageToData(BaseFunction):
+    """Image and data in, image out
+
+    This specificy variant waits for signals from input_data, but not input_image.
+    """
+    #pylint: disable=abstract-method
+    # This class is still abstract
+
+    @QtCore.pyqtSlot()
+    def call(self):
+        """Call to the function.
+
+        Will only compute if none of the inputs are None, and both signals have been received.
+        """
+        if isinstance(self.sender(), BaseIO) and self.received['input_data']:
+            logging.info('%s received all signals, computing', self.title)
+            super().call()
+            for signal in self.received:
+                self.received[signal] = False
+        elif not isinstance(self.sender(), BaseIO):
+            logging.info('%s sender is not instance of BaseIO, computing', self.title)
+            super().call()
+        else:
+            missing = [signal for signal in self.received if not self.received[signal]]
+            logging.info('%s Waiting for other signal %s', self.title, missing)
+            logging.debug(self.received)
+
+    def __init__(self, *args, **kwargs):
+        self.received = {'input_data': False, 'input_image': False}
+        self.input_data = Input()
+        self.input_image = Input()
+        self.input_data.changed.connect(self.set_input_data_received)
+        self.input_image.changed.connect(self.set_input_image_received)
+        self.output_image = Output()
+        super().__init__(*args, *kwargs)
+
+    def set_input_data_received(self):
+        """Sets self.received['input_data'] to true"""
+        self.received['input_data'] = True
+
+    def set_input_image_received(self):
+        """Sets self.received['input_image'] to true"""
+        self.received['input_image'] = True

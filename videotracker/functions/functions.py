@@ -3,8 +3,9 @@
 import cv2
 
 from . import params
-from .abc import BaseFunction, ImageToImage, DataToData, ImageToData, Output, Input
+from .abc import ImageToImage, DataToData, ImageToData, Output, Input, DataImageToData
 from .. import helpers
+from .. import contours
 
 ### FUNCTIONS ###
 # Unlike the previous parts, these can inherit from QWidget.
@@ -74,19 +75,13 @@ class SizeFilter(DataToData):
         self.output_data.data = [i for i in self.input_data.data
                                  if self.values['minimum'] <= cv2.contourArea(i) <= self.values['maximum']]
 
-class DrawContours(BaseFunction):
+class DrawContours(DataImageToData):
     """Draws Contours"""
     title: str = 'Draw Contours'
     params: dict = {
         'color': params.ColorParam(),
         'thickness': params.IntParam(minimum=1, maximum=100, label='Thickness')
     }
-    def __init__(self, *args, **kwargs):
-        self.input_data = Input()
-        self.input_image = Input()
-        self.output_image = Output()
-        super().__init__(*args, **kwargs)
-
     def function(self):
         """Draws contours"""
         self.output_image.data = cv2.drawContours(
@@ -128,3 +123,25 @@ class BGR2Gray(ImageToImage):
     def function(self):
         """Convert bgr to gray"""
         self.output_image.data = cv2.cvtColor(self.input_image.data, cv2.COLOR_BGR2GRAY)
+
+class ExtractPolygonFeatures(DataToData):
+    """Extracts polygon features from polygons"""
+    title: str = 'Polygon Features'
+    params: dict = {
+        'area': params.CheckParam(label='Area'),
+        'orientation': params.CheckParam(label='Orientation'),
+        'pos': params.CheckParam(label='Complex Position'),
+    }
+    hidden: bool = False
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.output_data.fields = ('x', 'y', 'area')
+
+    def function(self):
+        """Extract polygon features"""
+        outputs = [value for value in self.values if self.values[value]]
+        self.output_data.data = contours.extract_features(self.input_data.data,
+                                                          extra_features=outputs)
+        if self.output_data.data:
+            self.output_data.fields = self.output_data.data[0].keys()
