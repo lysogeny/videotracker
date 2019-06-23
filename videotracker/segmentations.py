@@ -40,6 +40,7 @@ from . import functions
 class StackWidget(QtWidgets.QWidget):
     """A widget that represents a stack"""
     valueChanged = QtCore.pyqtSignal(dict)
+    view_changed = QtCore.pyqtSignal(str)
 
     def __init__(self, widgets, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -60,7 +61,9 @@ class StackWidget(QtWidgets.QWidget):
             for widget in self.widgets
             if not self.widgets[widget].hidden
         ]
-        self.layout.addWidget(ImageChoiceWidget(titles))
+        im_choice = ImageChoiceWidget(titles)
+        self.layout.addWidget(im_choice)
+        im_choice.valueChanged.connect(self.view_changed.emit)
 
     def emit(self):
         """Emits current value dictionary"""
@@ -188,8 +191,22 @@ class BaseStack(QtCore.QThread):
             method: self.methods[method].widget() for method in self.methods
         }
         widget = StackWidget(widgets)
+        widget.view_changed.connect(self.set_view)
         self.values = widget.values
         return widget
+
+    def set_view(self, name: str):
+        """Sets the view attribute to the output identified by name"""
+        self.view = self._outputs[name]
+        #self.view_changed.emit()
+
+    @property
+    def view(self):
+        return self._view
+    @view.setter
+    def view(self, view):
+        self._view = view
+        self.view_changed.emit()
 
     @property
     def in_file(self) -> str:
@@ -217,6 +234,7 @@ class BaseStack(QtCore.QThread):
     @QtCore.pyqtSlot(int)
     def set_pos(self, index: int):
         """Sets position of video to index"""
+        print(self.sender())
         self.pos = index
 
     def fetch_image(self):

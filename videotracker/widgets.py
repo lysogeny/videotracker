@@ -258,18 +258,18 @@ class ImageView(QWidget):
     @source.setter
     def source(self, value):
         try:
-            self._source.changed.disconnect(self.get)
+            self._source.view_changed.disconnect(self.get)
         except TypeError:
             pass
         except AttributeError:
             pass
         self._source = value
-        self._source.changed.connect(self.get)
+        self._source.view_changed.connect(self.get)
 
     def get(self):
         """Gets new data"""
-        self.image = self.source.data
-        logging.info('Data copied to ImageView')
+        self.image = self.source.view.data
+        logging.debug('Data copied to ImageView')
 
     def __init__(self):
         super().__init__()
@@ -477,12 +477,15 @@ class SideDock(QDockWidget, BaseFileObject):
     def module(self, value):
         del self.module
         self._module = value
-        self.custom_box.addWidget(value)
+        self.module_widget = self._module.widget()
+        self.custom_box.addWidget(self.module_widget)
     @module.deleter
     def module(self):
-        self.custom_box.removeWidget(self._module)
+        self.custom_box.removeWidget(self.module_widget)
         if self._module is not None:
             self._module.deleteLater()
+        if self.module_widget is not None:
+            self.module_widget.deleteLater()
         #del self._module
 
     @property
@@ -501,6 +504,7 @@ class SideDock(QDockWidget, BaseFileObject):
         self.setFeatures(QDockWidget.DockWidgetMovable)
         self.files = {'csv': None, 'vid': None}
         self._module = None
+        self.module_widget = None
         self.create_gui()
         if module:
             self.module = module

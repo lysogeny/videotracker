@@ -91,7 +91,7 @@ class MainView(QtWidgets.QMainWindow, widgets.BaseFileObject):
         self.state = {
             'running': False,
             'loaded': False,
-            'image_control': False
+            'image_control': True
         }
         self.debug = debug
         self.create_gui()
@@ -105,6 +105,7 @@ class MainView(QtWidgets.QMainWindow, widgets.BaseFileObject):
         self.vid_file = vid_file
         if self.in_file is not None:
             self.input_load()
+        self.image_control = True
 
     @property
     def has_module(self) -> bool:
@@ -162,7 +163,7 @@ class MainView(QtWidgets.QMainWindow, widgets.BaseFileObject):
         helpers.disconnect(self.options.pos_changed)
         helpers.disconnect(self.image.pos_changed)
         if value:
-            conn = self.image.pos_changed.connect(self.options.video.fetch, type=QtCore.Qt.QueuedConnection)
+            conn = self.image.pos_changed.connect(self.options.set_pos)
         else:
             self.options.pos_changed.connect(self.image.set_pos)
         self.image.enabled = value
@@ -306,7 +307,9 @@ class MainView(QtWidgets.QMainWindow, widgets.BaseFileObject):
 
     def breakpoint(self):
         """This is a breakpoint"""
-        import ipdb; ipdb.set_trace()  # XXX BREAKPOINT
+        #pylint: disable=no-self-use
+        import ipdb
+        ipdb.set_trace()  # Intentional BREAKPOINT
 
     def input_pick(self):
         """Spawn a video picking dialog"""
@@ -339,7 +342,7 @@ class MainView(QtWidgets.QMainWindow, widgets.BaseFileObject):
         dialog = ModuleDialog()
         if dialog.result:
             module = dialog.value
-            logging.info('User chose new module {}'.format(module))
+            logging.info('User chose new module %s', module)
             self.module_load(module)
 
     def module_load(self, method=segmentations.ShortStack):
@@ -347,10 +350,13 @@ class MainView(QtWidgets.QMainWindow, widgets.BaseFileObject):
         # Delete old options
         # Create new options
         self.options = method() # Method is constructed
+        self.options_thread = QtCore.QThread()
+        self.options_thread.setObjectName('ModuleThread')
+        self.options.moveToThread(self.options_thread)
         self.dock.module = self.options
-        self.options.view_changed.connect(lambda: setattr(self.image, 'image', self.options.view.data))
-        self.options.output_changed.connect(lambda: setattr(self.image, 'image', self.options.view.data))
-        #self.image.source = self.options.view
-        #self.options.thread.finished.connect(lambda: setattr(self, 'running', False))
-        #self.options.thread.loop_complete.connect(lambda: setattr(self, 'running', False))
-        #self.options.thread.computing.connect(helpers.change_cursor)
+        self.image.source = self.options
+        self.options.start()
+        self.options_thread.start()
+        self.options.view_changed.connect(self.image.get)
+        self.options.output_changed.connect(self.image.get)
+        self.image.pos_changed.connect(self.options.set_pos)
