@@ -86,6 +86,7 @@ class DrawContours(BaseFunction):
         self.input_image = Input()
         self.output_image = Output()
         super().__init__(*args, **kwargs)
+
     def function(self):
         """Draws contours"""
         self.output_image.data = cv2.drawContours(

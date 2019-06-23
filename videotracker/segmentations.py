@@ -24,6 +24,9 @@ method of the function's probably should use some reference to the previous
 result.  We thus also need a input property for each function. This property is
 then used by __call__ to calculate the next result.
 
+If you have graphviz and the graphviz module installed, you can use the stack's
+dot_graph method to generate a dot language representation of the stack.
+
 """
 
 #import json
@@ -180,7 +183,6 @@ class BaseStack(QtCore.QThread):
             else:
                 yield (end, starts)
 
-
     def connect_methods(self):
         """Connects the methods for this function stack"""
         for end, start in self.construct_graph():
@@ -212,9 +214,31 @@ class BaseStack(QtCore.QThread):
                     connection_end = getattr(self.methods[end], f'input_{connection}')
                     connection_end.source = connection_start
                     logging.info('Internal `%s` from `%s` mapped to `%s`',
-                                connection, self.methods[start], self.methods[end])
+                                 connection, self.methods[start], self.methods[end])
             if end.startswith('output'):
                 getattr(self.methods[start], end).changed.connect(self.output_changed.emit)
+
+    def dot_graph(self, file_name):
+        """Returns a dot language representation of the stack"""
+        from graphviz import Digraph
+        graph = Digraph(comment=f'{type(self).__name__}')
+        for node in self.methods:
+            method = self.methods[node]
+            graph.node(node, f'{method.title}')
+        for end, start in self.construct_graph():
+            if end.startswith('output'):
+                graph.node(end)
+                data_type = end.split('_')[-1]
+            if start.startswith('input'):
+                graph.node(start)
+                data_type = start.split('_')[-1]
+            if not start.startswith('input') and not end.startswith('output'):
+                start_set = {method.split('_')[-1] for method in self.methods[start].outputs.keys()}
+                end_set = {method.split('_')[-1] for method in self.methods[end].inputs.keys()}
+                data_type = list(start_set.intersection(end_set))[0]
+            logging.debug('%s → %s (%s)', start, end, data_type)
+            graph.edge(start, end, label=data_type)
+        return graph.render(file_name)
 
     def widget(self):
         """Construct a StackWidget widget"""
@@ -375,6 +399,28 @@ class ThresholdStack(BaseStack):
         'adaptive_threshold': 'gaussian_blur',
         'gaussian_blur': 'bgr2gray',
         'bgr2gray': 'input_image',
+    }
+
+class SimpleThresholdStack(BaseStack):
+    """Threshold stack, simplified
+
+    This variant of the adaptive thresholding stack offers much more simplicity.
+    Especially useful for new users.
+    """
+
+    methods = {
+        'pre': functions.threshold.PreProcessor,
+        'at': functions.AdaptiveThreshold,
+        'post': functions.threshold.PostProcessor,
+        'gray': functions.BGR2Gray,
+    }
+    method_graph = {
+        'output_image': 'post',
+        'output_data': 'post',
+        'post': ('at', 'gray'),
+        'at': 'pre',
+        'pre': 'gray',
+        'gray': 'input_image',
     }
 
 class NullStack(BaseStack):

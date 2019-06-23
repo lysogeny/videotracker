@@ -50,7 +50,7 @@ class ModuleDialog(QtWidgets.QDialog):
         """Populates the list with options"""
         for name, obj in inspect.getmembers(module):
             if (inspect.isclass(obj) # The item is a class
-                    and issubclass(obj, QtWidgets.QWidget) # The class inherits from QWidget
+                    and issubclass(obj, segmentations.BaseStack) # The class inherits from QWidget
                     and not name.startswith('Base')): # And isn't Abstract
                 self.options[name] = obj
                 short_name = name
@@ -289,6 +289,8 @@ class MainView(QtWidgets.QMainWindow, widgets.BaseFileObject):
                 QtWidgets.QAction(QtGui.QIcon.fromTheme('help-about'), 'About Qt',
                                   statusTip='Help, I am stuck in a GUI factory',
                                   triggered=QtWidgets.qApp.aboutQt),
+                QtWidgets.QAction('Save dot...', statusTip='Saves Dot representation of module',
+                                  triggered=self.module_dot),
             ]
         }
         if self.debug:
@@ -362,3 +364,10 @@ class MainView(QtWidgets.QMainWindow, widgets.BaseFileObject):
         self.options.view_changed.connect(self.image.get)
         self.options.output_changed.connect(self.image.get)
         self.image.pos_changed.connect(self.options.set_pos)
+
+    def module_dot(self):
+        """Prompts user to save the module as a dot graph."""
+        if self.options is not None:
+            save_file = QtWidgets.QFileDialog.getSaveFileName(self, 'Save DOT Graph')
+            if save_file[0]:
+                self.options.dot_graph(save_file[0])
