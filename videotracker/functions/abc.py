@@ -59,6 +59,7 @@ class Input(BaseIO):
         self._source = value
         self._source.changed.connect(self.get)
 
+    @QtCore.pyqtSlot()
     def get(self):
         """Sets the data"""
         if self.source:
@@ -66,6 +67,7 @@ class Input(BaseIO):
 
 class Output(BaseIO):
     """Output data"""
+
 
 class FunctionWidget(QtWidgets.QGroupBox):
     """Widgets for functions
@@ -77,9 +79,10 @@ class FunctionWidget(QtWidgets.QGroupBox):
     """
     valueChanged = QtCore.pyqtSignal(dict)
 
-    def __init__(self, title, params, *args, **kwargs):
+    def __init__(self, title, params, *args, hidden=False, **kwargs):
         super().__init__(*args, **kwargs)
         self.title = title
+        self.hidden = hidden
         self.params = params
         self.create_gui()
 
@@ -108,6 +111,14 @@ class FunctionWidget(QtWidgets.QGroupBox):
             param: self.widgets[param]['widget'].value()
             for param in self.widgets
         }
+    @values.setter
+    def values(self, value: dict):
+        for key in value:
+            self.widgets[key]['widget'].setValue(value)
+
+    def set_values(self, value: dict):
+        """Set value attribute"""
+        self.values = value
 
 class BaseFunction(QtCore.QThread):
     """Abstract function.
@@ -115,9 +126,15 @@ class BaseFunction(QtCore.QThread):
     There are both a widget and a function that need to be separate objects.
     The widget can be created with the `.widget()` method. The widget will be
     automatically connected to the thread object.
+
+    Class attributes:
+        title: The title used for the widget
+        params: The parameters that this function uses. A dict of params as defined in `params.py`
+        hidden: A boolean indicating if the constructed widget should remain hidden.
     """
     title: str
     params: dict
+    hidden: bool = False
 
     values_changed = QtCore.pyqtSignal(dict)
 
@@ -154,14 +171,17 @@ class BaseFunction(QtCore.QThread):
         self.setObjectName(type(self).__name__)
         #self.thread.finished.connect(self.extract)
         # We need to connect the valuechanges to a function that recomputes things.
-        self.values_changed.connect(self.function)
-        # We also connect the input being changed to the function's call
+        self.create_connections()
+
+    def create_connections(self):
+        """Creates connections for this function"""
         for input_signal in self.inputs.values():
-            input_signal.changed.connect(self.function)
+            input_signal.changed.connect(self.call)
+        self.values_changed.connect(self.call)
 
     def widget(self):
         """Creates the associated widget and connects it"""
-        widget = FunctionWidget(self.title, self.params)
+        widget = FunctionWidget(self.title, self.params, hidden=self.hidden)
         widget.valueChanged.connect(self.set_values)
         self.values = widget.values
         return widget
@@ -179,14 +199,37 @@ class BaseFunction(QtCore.QThread):
         self._values = value
         self.values_changed.emit(value)
 
+    @QtCore.pyqtSlot(dict)
     def set_values(self, value: dict):
         """Sets the value attribute"""
         self.values = value
 
     def run(self):
         """Runs the thread event loop"""
-        logging.info('Started Thread %s', self.title)
-        self.exec_()
+        logging.info('Thread %s Started', self.title)
+        self.function()
+        logging.info('Thread %s Finished', self.title)
+
+    @QtCore.pyqtSlot()
+    def call(self):
+        """Call to the function.
+
+        Will only compute if none of the inputs are None.
+        """
+        conditions = [
+            self.inputs[key].data is not None
+            for key in self.inputs
+        ]
+        #logging.debug("This thread: %s %s", self.currentThread(), int(self.currentThreadId()))
+        if all(conditions):
+            if self.isRunning():
+                logging.debug('previously running %s', self.title)
+                #self.terminate()
+            logging.debug('Computing %s', self.title)
+            self.start()
+        else:
+            logging.debug('%i Inputs are None, not computing %s',
+                          len(conditions) - sum(conditions), self.title)
 
     def function(self):
         """A function"""
@@ -194,6 +237,8 @@ class BaseFunction(QtCore.QThread):
 
 class ImageToImage(BaseFunction):
     """Image in, Image out"""
+    # pylint: disable=abstract-method
+    # This class is still abstract.
     def __init__(self, *args, **kwargs):
         self.input_image = Input()
         self.output_image = Output()

@@ -111,3 +111,12 @@ class Morphology(ImageToImage):
                                            (self.values['ksize'], self.values['ksize']))
         self.output_image.data = cv2.morphologyEx(self.input_image.data,
                                                   self.values['operation'], kernel)
+
+class BGR2Gray(ImageToImage):
+    """Converts BGR images to Grayscale"""
+    title: str = 'Convert colour'
+    params: dict = {}
+    hidden: bool = True
+    def function(self):
+        """Convert bgr to gray"""
+        self.output_image.data = cv2.cvtColor(self.input_image.data, cv2.COLOR_BGR2GRAY)

@@ -33,21 +33,53 @@ import logging
 
 from PyQt5 import QtWidgets, QtCore
 
-from .video import Video, VideoThread
+from .video import Video
 from . import functions
-from .functions import params
+#from .functions import params
 
-class BaseStack(QtWidgets.QWidget):
-    """An abstract stack of function"""
-    valueChanged = QtCore.pyqtSignal(dict) # The values of the widgets have changed
-    output_changed = QtCore.pyqtSignal()  # Computational output(s) have changed
-    view_changed = QtCore.pyqtSignal() # The chosen view has changed.
-    pos_changed = QtCore.pyqtSignal(int)
+class StackWidget(QtWidgets.QWidget):
+    """A widget that represents a stack"""
+    valueChanged = QtCore.pyqtSignal(dict)
 
-    # Methods to be used and description of connections between methods to be
-    # made.
-    methods = {}
-    method_graph = {}
+    def __init__(self, widgets, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.widgets = widgets
+        self.enabled = self._enabled = True
+        self.create_gui()
+
+    def create_gui(self):
+        """Creates the widget's GUI"""
+        self.layout = QtWidgets.QVBoxLayout()
+        self.setLayout(self.layout)
+        for widget in self.widgets:
+            if not self.widgets[widget].hidden:
+                self.layout.addWidget(self.widgets[widget])
+                self.widgets[widget].valueChanged.connect(self.emit)
+        titles = [
+            (widget, self.widgets[widget].title)
+            for widget in self.widgets
+            if not self.widgets[widget].hidden
+        ]
+        self.layout.addWidget(ImageChoiceWidget(titles))
+
+    def emit(self):
+        """Emits current value dictionary"""
+        self.valueChanged.emit(self.values)
+
+    @property
+    def values(self) -> dict:
+        """Values of this widget"""
+        return {
+            widget: self.widgets[widget].values for widget in self.widgets
+        }
+    @values.setter
+    def values(self, value: dict):
+        for key in value:
+            self.widgets[key].values = value
+
+    def set_values(self, value: dict):
+        """Set value attribute of this object"""
+        self.values = value
 
     @property
     def enabled(self) -> bool:
@@ -60,61 +92,51 @@ class BaseStack(QtWidgets.QWidget):
         for widget in self.widgets:
             self.widgets[widget].setEnabled(value)
 
-    def set_running(self, value: bool):
-        """Sets the running property
+class ImageChoiceWidget(QtWidgets.QGroupBox):
+    """A widget for image choices"""
 
-        Exists to be a slot.
-        """
-        self.running = value
+    valueChanged = QtCore.pyqtSignal(str)
 
-    @property
-    def running(self) -> bool:
-        """The running state of the module"""
-        # Todo: define how to run
-        return self._running
-    @running.setter
-    def running(self, value: bool):
-        self._running = value
+    def __init__(self, choices, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.choices = choices
+        self.create_gui()
+        self.widget.currentIndexChanged.connect(self.emit)
 
-    @property
-    def in_file(self) -> str:
-        """The input file"""
-        return self.files['in']
-    @in_file.setter
-    def in_file(self, value: str):
-        self.files['in'] = value
-        if value is not None:
-            self.video = VideoThread(value)
-            logging.debug('VideoCaptureThread: %s', self.video.currentThread())
-            self.video.start()
-            self.video.frame_loaded.connect(self.fetch_image)
-            self.video.fetch(1)
-        # This might cause problems, depending on what the behaviour of the
-        # video object was.
+    def create_gui(self):
+        """Constructs the gui"""
+        self.setTitle('Image View')
+        self.layout = QtWidgets.QGridLayout()
+        self.setLayout(self.layout)
+        self.layout.addWidget(QtWidgets.QLabel('Output'), 0, 0)
+        self.widget = QtWidgets.QComboBox()
+        for choice, title in self.choices:
+            self.widget.addItem(title, choice)
+        self.layout.addWidget(self.widget, 0, 1)
 
-    @property
-    def pos(self) -> int:
-        """Position in the video file"""
-        return self.video.pos
+    def emit(self):
+        """Emits change of current value"""
+        self.valueChanged.emit(self.widget.currentData())
 
-    def fetch_image(self):
-        """Fetches current frame from video object"""
-        self.input_image.data = self.video.frame
+class BaseStack(QtCore.QThread):
+    """An abstract stack of function"""
+    output_changed = QtCore.pyqtSignal()  # Computational output(s) have changed
+    view_changed = QtCore.pyqtSignal() # The view has changed.
+    pos_changed = QtCore.pyqtSignal(int) # Position of the video has changed.
 
-    def __init__(self, *args, input_file=None, csv_file=None, vid_file=None, **kwargs):
+    # These describe the Stack.
+    methods = {}
+    method_graph = {}
+
+    def __init__(self, *args, in_file=None, csv_file=None, vid_file=None, **kwargs):
         super().__init__(*args, **kwargs)
         # These two are no longer properties, as they don't need anything to
         # happen on setting or loading.
         self.video = None
         self.files = {'in': None, 'csv': None, 'vid': None}
-        self.csv_file: str = csv_file
-        self.vid_file: str = vid_file
-        self.input_file: str = input_file
         self._running = False
         self._enabled = False
-        self.widgets = {}
-        self.create_gui()
-        #self.create_methods()
+        self.create_methods()
         self.connect_methods()
         self._inputs = {
             fun: self.methods[fun].input_image for fun in self.methods
@@ -123,64 +145,27 @@ class BaseStack(QtWidgets.QWidget):
             fun: self.methods[fun].output_image for fun in self.methods
         }
         self.view = self._outputs['morphology']
-        self.display()
-
-    @property
-    def outputs(self):
-        """Output of all variables here"""
-        return {output: self._outputs[output].data for output in self._outputs}
-
-    def create_gui(self):
-        """Creates the widget of this method stack"""
-        layout = QtWidgets.QVBoxLayout()
-        self.setLayout(layout)
-        self.methods = self.widgets = {
-            function: self.methods[function]() for function in self.methods
-        }
-        for widget in self.widgets:
-            self.widgets[widget].valueChanged.connect(self.valueChanged.emit)
-            layout.addWidget(self.widgets[widget])
-        box = QtWidgets.QGroupBox('Other options')
-        widgets = params.ChoiceParam(
-            choices=self.widgets.keys(),
-            labels=(self.widgets[widget].title for widget in self.widgets),
-            label='Display Image'
-        ).widget()
-        image_choice = QtWidgets.QHBoxLayout()
-        image_choice.addWidget(widgets['label'])
-        image_choice.addWidget(widgets['widget'])
-        value_load = QtWidgets.QHBoxLayout()
-        value_load.addWidget(QtWidgets.QPushButton('Load...'))
-        value_load.addWidget(QtWidgets.QPushButton('Save...'))
-        boxbox = QtWidgets.QVBoxLayout()
-        boxbox.addLayout(image_choice)
-        boxbox.addLayout(value_load)
-        box.setLayout(boxbox)
-        output_control = QtWidgets.QGridLayout()
-        output_box = QtWidgets.QGroupBox('Outputs')
-        output_box.setLayout(output_control)
-        output_control.addWidget(QtWidgets.QPushButton('CSV output'))
-        output_control.addWidget(QtWidgets.QPushButton('CSV output'), 1, 0)
-        layout.addWidget(box)
-        self.image_choice = widgets['widget']
-        self.image_choice.valueChanged.connect(self.display)
-
-    def display(self):
-        """Changes displays or something, idk"""
-        self.view = self._outputs[self.image_choice.value()]
-        self.view_changed.emit()
+        if in_file is None:
+            self._in_file = None
+        else:
+            self.in_file = in_file
 
     def create_methods(self):
         """Constructs methods for this method"""
+        self.threads = {}
         for method in self.methods:
-            self.methods[method] = self.methods[method]()
+            meth = self.methods[method] = self.methods[method]()
+            thread = self.threads[method] = QtCore.QThread()
+            thread.setObjectName(method)
+            meth.moveToThread(thread)
+            thread.start()
 
     def connect_methods(self):
         """Connects the methods for this function stack"""
         for edge in self.method_graph:
             # Special names: IMAGE, DATA, INPUT
             end = self.method_graph[edge]
-            logging.info("{} → {}".format(end, edge))
+            logging.info("Connect: %s → %s", end, edge)
             if edge == 'output_image':
                 # Output image is mapped to this guy's output
                 self.output_image = self.methods[end].output_image
@@ -197,13 +182,73 @@ class BaseStack(QtWidgets.QWidget):
             if edge.startswith('output'):
                 getattr(self.methods[end], edge).changed.connect(self.output_changed.emit)
 
+    def widget(self):
+        """Construct a StackWidget widget"""
+        widgets = {
+            method: self.methods[method].widget() for method in self.methods
+        }
+        widget = StackWidget(widgets)
+        self.values = widget.values
+        return widget
+
+    @property
+    def in_file(self) -> str:
+        """The input file"""
+        return self.files['in']
+    @in_file.setter
+    def in_file(self, value: str):
+        self.files['in'] = value
+        if value is not None:
+            self.video = Video(value)
+            self.input_image.data = self.video.frame
+        # This might cause problems, depending on what the behaviour of the
+        # video object was.
+
+    @property
+    def pos(self) -> int:
+        """Position in the video file"""
+        return self.video.position
+    @pos.setter
+    def pos(self, value: int):
+        if value != self.pos:
+            self.video.position = value
+            self.fetch_image()
+
+    @QtCore.pyqtSlot(int)
+    def set_pos(self, index: int):
+        """Sets position of video to index"""
+        self.pos = index
+
+    def fetch_image(self):
+        """Fetches current frame from video object"""
+        self.input_image.data = self.video.frame
+
+    @property
+    def outputs(self):
+        """Output of all variables here"""
+        return {output: self._outputs[output].data for output in self._outputs}
+
     @property
     def values(self) -> dict:
         """Values provided by subservient functions"""
         return {
-            function: self.widgets[function].values
-            for function in self.widgets
+            function: self.methods[function].values
+            for function in self.methods
         }
+    @values.setter
+    def values(self, value: dict):
+        for method in self.methods:
+            self.methods[method].values = value[method]
+
+    def set_values(self, value: dict):
+        """Sets values attribute"""
+        self.values = value
+
+    def run(self):
+        """Runs this thread"""
+        logging.info('%s Started', type(self).__name__)
+        self.exec_()
+        logging.info('%s Finished', type(self).__name__)
 
 class ShortStack(BaseStack):
     """A short stack that does not output data, but only images"""
@@ -211,12 +256,14 @@ class ShortStack(BaseStack):
         'gaussian_blur': functions.GaussianBlur,
         'adaptive_threshold': functions.AdaptiveThreshold,
         'morphology': functions.Morphology,
+        'bgr2gray': functions.BGR2Gray,
     }
     method_graph = {
         'output_image': 'morphology',
         'morphology': 'adaptive_threshold',
         'adaptive_threshold': 'gaussian_blur',
-        'gaussian_blur': 'input_image',
+        'gaussian_blur': 'bgr2gray',
+        'bgr2gray': 'input_image',
     }
 
 class ThresholdStack(BaseStack):

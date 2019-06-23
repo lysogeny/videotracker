@@ -28,7 +28,8 @@ class BaseParam:
     inherit from BaseParam. In that dataclass you define a series of values
     which can be used in the widget_callable's constructor.
 
-    In practical terms this means that you look for a widget that you would like to have as a parameter, and have the values
+    In practical terms this means that you look for a widget that you would like
+    to have as a parameter, and have the values
 
     """
     label: str = ''
