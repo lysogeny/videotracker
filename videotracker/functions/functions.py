@@ -4,8 +4,9 @@ import collections
 
 import cv2
 
+from .. import video
 from . import params
-from .abc import BaseFunction, ImageToImage
+from .abc import BaseFunction, ImageToImage, Output, Input
 
 ### FUNCTIONS ###
 # Unlike the previous parts, these can inherit from QWidget.

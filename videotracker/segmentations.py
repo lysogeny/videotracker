@@ -126,6 +126,7 @@ class BaseStack(QtCore.QThread):
     output_changed = QtCore.pyqtSignal()  # Computational output(s) have changed
     view_changed = QtCore.pyqtSignal() # The view has changed.
     pos_changed = QtCore.pyqtSignal(int) # Position of the video has changed.
+    complete = QtCore.pyqtSignal()
 
     # These describe the Stack.
     methods = {}
@@ -139,13 +140,16 @@ class BaseStack(QtCore.QThread):
         self.files = {'in': None, 'csv': None, 'vid': None}
         self._running = False
         self._enabled = False
+        self._view = None
         self.create_methods()
         self.connect_methods()
         self._inputs = {
             fun: self.methods[fun].input_image for fun in self.methods
+            if hasattr(self.methods[fun], 'input_image')
         }
         self._outputs = {
             fun: self.methods[fun].output_image for fun in self.methods
+            if hasattr(self.methods[fun], 'output_image')
         }
         self.view = self._outputs['morphology']
         if in_file is None:
@@ -231,11 +235,41 @@ class BaseStack(QtCore.QThread):
             self.video.position = value
             self.fetch_image()
 
+    @property
+    def running(self) -> bool:
+        """The running state. True indicates a segmentation is running"""
+        return self._running
+    @running.setter
+    def running(self, value: bool):
+        self._running = value
+        if value:
+            self.set_pos(0)
+            self.output_changed.connect(self.segment)
+            self.next()
+        else:
+            self.output_changed.disconnect(self.segment)
+
+    def segment(self):
+        """Segments. If StopIteration is encountered, stops"""
+        logging.debug('Next frame!')
+        try:
+            self.next()
+        except StopIteration:
+            self.complete.emit()
+            self.in_file = self.in_file
+            # Seems effectless, but isn't.
+            # Actually resets the video device
+
     @QtCore.pyqtSlot(int)
     def set_pos(self, index: int):
         """Sets position of video to index"""
         print(self.sender())
         self.pos = index
+
+    def next(self):
+        """Loads next image from video device"""
+        self.input_image.data = next(self.video)
+        self.pos_changed.emit(self.pos)
 
     def fetch_image(self):
         """Fetches current frame from video object"""
@@ -271,10 +305,13 @@ class BaseStack(QtCore.QThread):
 class ShortStack(BaseStack):
     """A short stack that does not output data, but only images"""
     methods = {
+        #'input_image': functions.special.InputImage,
         'gaussian_blur': functions.GaussianBlur,
         'adaptive_threshold': functions.AdaptiveThreshold,
         'morphology': functions.Morphology,
         'bgr2gray': functions.BGR2Gray,
+        #'output_image': functions.special.OutputImage,
+        #'output_data': functions.special.OutputData,
     }
     method_graph = {
         'output_image': 'morphology',
@@ -301,15 +338,20 @@ class ThresholdStack(BaseStack):
     # method_graph describes how the signal's and slots from the different
     # functions are connected.
     method_graph = {
-        'IMAGE': 'draw_contours',
-        'DATA': 'size_filter',
-        'draw_contours': ('INPUT', 'size_filter'),
+        'output_image': 'draw_contours',
+        'output_data': 'size_filter',
+        'draw_contours': ('input_image', 'size_filter'),
         'size_filter': 'contour_extract',
         'contour_extract': 'morphology',
         'morphology': 'adaptive_threshold',
         'adaptive_threshold': 'gaussian_blur',
-        'gaussian_blur': 'INPUT'
+        'gaussian_blur': 'input_image'
     }
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        output_image = abc.Output()
+        output_data = abc.Output()
+        input_image = abc.Input()
 
 class NullStack(BaseStack):
     """A stack that does nothing.

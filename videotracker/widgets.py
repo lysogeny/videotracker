@@ -80,6 +80,68 @@ class BaseFileObject:
                 self.widgets[widget].vid_file = value
             except AttributeError:
                 pass
+
+class FileOpenButton(QPushButton):
+    """A button, that when pushed, returns a filename"""
+
+    valueChanged = QtCore.pyqtSignal(str)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._file: str = ""
+        self.clicked.connect(self.pick_file)
+        self.setText('File...')
+
+    def pick_file(self):
+        """Pick a file using QtWidgets.QFiledialog.getOpenFileName"""
+        name = QtWidgets.QFileDialog.getOpenFileName(self, 'File...', self._file, 'All Files (*)')
+        if name[0]:
+            self.setValue(name[0])
+
+    def setValue(self, value: str):
+        """Sets the value of the widget"""
+        # pylint: disable=invalid-name
+        # Unfortunately, Qt5 naming is awful.
+        self._file = value
+        self.valueChanged.emit(value)
+        pathsplit = os.path.split(value)
+        self.setText(pathsplit[-1])
+
+    def value(self) -> str:
+        """The value of the widget"""
+        return self._file
+
+class FileSaveButton(QPushButton):
+    """A button, that when pushed, returns a filename"""
+
+    valueChanged = QtCore.pyqtSignal(str)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._file: str = ""
+        self.clicked.connect(self.pick_file)
+        self.setText('File...')
+
+    def pick_file(self):
+        """Pick a file using QtWidgets.QFiledialog.getSaveFileName"""
+        name = QtWidgets.QFileDialog.getSaveFileName(self, 'File...', self._file, 'All Files (*)')
+        if name[0]:
+            self.setValue(name[0])
+
+    def setValue(self, value: str):
+        """Sets the value of the widget"""
+        # pylint: disable=invalid-name
+        # Unfortunately, Qt5 naming is awful.
+        self._file = value
+        self.valueChanged.emit(value)
+        pathsplit = os.path.split(value)
+        self.setText(pathsplit[-1])
+
+    def value(self) -> str:
+        """The value of the widget"""
+        return self._file
+
+
 class ColorButton(QPushButton):
     """A button, that when pushed, returns a colour"""
 
@@ -90,7 +152,7 @@ class ColorButton(QPushButton):
         self._color = QtGui.QColor()
         self.dialog = QColorDialog()
         self.clicked.connect(self.pick_color)
-        self.setStyleSheet("color: {}".format(self.value()))
+        self.setStyleSheet(f"color: {self.value()}")
         self.setText(self.value())
 
     def setValue(self, value: str):
@@ -99,7 +161,7 @@ class ColorButton(QPushButton):
         # Unfortunately, Qt5 naming is awful.
         self._color = QtGui.QColor(value)
         self.valueChanged.emit(self.value())
-        self.setStyleSheet("color: {}".format(self.value()))
+        self.setStyleSheet(f"color: {self.value()}")
         self.setText(self.value())
 
     def value(self) -> str:
@@ -489,6 +551,7 @@ class SideDock(QDockWidget, BaseFileObject):
             widget.setEnabled(not self._running)
         if self.module is not None:
             self.module.enabled = not value
+            self.module_widget.enabled = not value
             self.module.running = value
         #self.custom.thread.running = value
         # This might seem strange and effectless, but it does reset the buttons

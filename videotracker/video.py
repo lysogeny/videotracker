@@ -33,6 +33,7 @@ class Video:
         self._frame = None
         self._new = True
         self.file_name = file_name
+        self.output_image = abc.Output()
         if self.file_name is not None:
             self.capture = cv2.VideoCapture(self.file_name)
 
@@ -96,6 +97,7 @@ class Video:
             self.position -= 1
             if exists:
                 self._frame = frame
+                self.output_image.data = frame
                 self._new = False
             else:
                 raise IndexError('Video frame {} does not exist'.format(self.position))

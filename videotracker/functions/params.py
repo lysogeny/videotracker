@@ -70,6 +70,18 @@ class ColorParam(BaseParam):
     label: str = 'Colour'
 
 @dataclass
+class FileOpenParam(BaseParam):
+    """Paramater for an input file"""
+    widget_callable: Callable = widgets.FileOpenButton
+    label: str = 'Input File'
+
+@dataclass
+class FileSaveParam(BaseParam):
+    """Paramater for an output file"""
+    widget_callable: Callable = widgets.FileSaveButton
+    label: str = 'Output File'
+
+@dataclass
 class ChoiceParam(BaseParam):
     """Choice Parameter"""
     widget_callable: Callable = QtWidgets.QComboBox

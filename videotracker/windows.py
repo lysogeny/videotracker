@@ -136,6 +136,7 @@ class MainView(QtWidgets.QMainWindow, widgets.BaseFileObject):
             self.widgets[widget].enabled = not value
         self.image_control = not value
         self.dock.running = value
+        self.options.running = value
 
     @property
     def loaded(self) -> bool:
@@ -345,7 +346,7 @@ class MainView(QtWidgets.QMainWindow, widgets.BaseFileObject):
             logging.info('User chose new module %s', module)
             self.module_load(module)
 
-    def module_load(self, method=segmentations.ShortStack):
+    def module_load(self, method=segmentations.ThresholdStack):
         """Creates a dock with the given method"""
         # Delete old options
         # Create new options
@@ -357,6 +358,7 @@ class MainView(QtWidgets.QMainWindow, widgets.BaseFileObject):
         self.image.source = self.options
         self.options.start()
         self.options_thread.start()
+        self.options.complete.connect(lambda: setattr(self, 'running', False))
         self.options.view_changed.connect(self.image.get)
         self.options.output_changed.connect(self.image.get)
         self.image.pos_changed.connect(self.options.set_pos)
