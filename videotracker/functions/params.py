@@ -67,6 +67,7 @@ class FloatParam(IntParam):
 class ColorParam(BaseParam):
     """Parameter for a colour"""
     widget_callable: Callable = widgets.ColorButton
+    color: str = '#ff0000'
     label: str = 'Colour'
 
 @dataclass

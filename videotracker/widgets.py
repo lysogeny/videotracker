@@ -146,10 +146,11 @@ class ColorButton(QPushButton):
 
     valueChanged = QtCore.pyqtSignal(str)
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, color, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._color = QtGui.QColor()
         self.dialog = QColorDialog()
+        self.setValue(color)
         self.clicked.connect(self.pick_color)
         self.setStyleSheet(f"color: {self.value()}")
         self.setText(self.value())
@@ -573,6 +574,7 @@ class SideDock(QDockWidget, BaseFileObject):
         self._module = value
         self.module_widget = self._module.widget()
         self.custom_box.addWidget(self.module_widget)
+        self.initial_module_values = self.module_widget.values
     @module.deleter
     def module(self):
         self.custom_box.removeWidget(self.module_widget)
@@ -604,6 +606,7 @@ class SideDock(QDockWidget, BaseFileObject):
             self.module = module
         self.running = False
         self._enabled = True
+        self.initial_module_values = None
 
     def emit_go(self):
         """Emits a go signal"""

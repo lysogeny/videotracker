@@ -114,6 +114,8 @@ class Video:
         """
         if not index:
             index = self.position + 1
+        if index == self.position + 1:
+            return next(self)
         self.position = index
         return self.frame
 

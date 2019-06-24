@@ -33,6 +33,9 @@ class BaseIO(QtCore.QObject):
         self._data = value
         self.changed.emit()
 
+class Data(BaseIO):
+    """Data object"""
+
 class Input(BaseIO):
     """Input data"""
     def __init__(self, *args, **kwargs):
@@ -68,7 +71,6 @@ class Input(BaseIO):
 
 class Output(BaseIO):
     """Output data"""
-
 
 class FunctionWidget(QtWidgets.QGroupBox):
     """Widgets for functions
@@ -116,7 +118,7 @@ class FunctionWidget(QtWidgets.QGroupBox):
     @values.setter
     def values(self, value: dict):
         for key in value:
-            self.widgets[key]['widget'].setValue(value)
+            self.widgets[key]['widget'].setValue(value[key])
 
     def set_values(self, value: dict):
         """Set value attribute"""
@@ -147,23 +149,27 @@ class BaseFunction(QtCore.QThread):
         return {
             attribute: getattr(self, attribute)
             for attribute in dir(self)
-            if not attribute in ('io', 'outputs', 'inputs')
-            and isinstance(getattr(self, attribute), BaseIO)
+            if attribute.startswith('output_')
+            or attribute.startswith('input_')
         }
 
     @property
     def outputs(self):
         """Gets attributes of self which are outputs"""
-        return {attribute: getattr(self, attribute)
-                for attribute in self.io
-                if isinstance(getattr(self, attribute), Output)}
+        return {
+            attribute: getattr(self, attribute)
+            for attribute in self.io
+            if attribute.startswith('output_')
+        }
 
     @property
     def inputs(self):
         """Gets attributes of self which are inputs"""
-        return {attribute: getattr(self, attribute)
-                for attribute in self.io
-                if isinstance(getattr(self, attribute), Input)}
+        return {
+            attribute: getattr(self, attribute)
+            for attribute in self.io
+            if attribute.startswith('input_')
+        }
 
     @property
     def outputs_image(self):
@@ -182,9 +188,9 @@ class BaseFunction(QtCore.QThread):
 
     def create_connections(self):
         """Creates connections for this function"""
-        for input_signal in self.inputs.values():
-            input_signal.changed.connect(self.call)
-        self.values_changed.connect(self.call)
+        #for input_signal in self.inputs.values():
+        #    input_signal.changed.connect(self.call)
+        #self.values_changed.connect(self.call)
 
     def widget(self):
         """Creates the associated widget and connects it"""
@@ -216,7 +222,7 @@ class BaseFunction(QtCore.QThread):
     def run(self):
         """Runs the thread event loop"""
         logging.info('Thread %s Started', self.title)
-        self.function()
+        self.start()
         logging.info('Thread %s Finished', self.title)
 
     @QtCore.pyqtSlot()
@@ -236,7 +242,7 @@ class BaseFunction(QtCore.QThread):
                 #self.terminate()
                 #self.wait()
             logging.debug('Computing %s', self.title)
-            self.start()
+            self.function()
         else:
             logging.debug('%i Inputs are None, not computing %s',
                           len(conditions) - sum(conditions), self.title)
@@ -250,8 +256,8 @@ class ImageToImage(BaseFunction):
     # pylint: disable=abstract-method
     # This class is still abstract.
     def __init__(self, *args, **kwargs):
-        self.input_image = Input()
-        self.output_image = Output()
+        self.input_image = Data()
+        self.output_image = Data()
         super().__init__(*args, **kwargs)
 
 class DataToData(BaseFunction):
@@ -259,8 +265,8 @@ class DataToData(BaseFunction):
     # pylint: disable=abstract-method
     # This class is still abstract
     def __init__(self, *args, **kwargs):
-        self.input_data = Input()
-        self.output_data = Output()
+        self.input_data = Data()
+        self.output_data = Data()
         super().__init__(*args, **kwargs)
 
 class ImageToData(BaseFunction):
@@ -268,8 +274,8 @@ class ImageToData(BaseFunction):
     # pylint: disable=abstract-method
     # This class is still abstract
     def __init__(self, *args, **kwargs):
-        self.input_image = Input()
-        self.output_data = Output()
+        self.input_image = Data()
+        self.output_data = Data()
         super().__init__(*args, **kwargs)
 
 class DataImageToData(BaseFunction):
@@ -280,38 +286,8 @@ class DataImageToData(BaseFunction):
     #pylint: disable=abstract-method
     # This class is still abstract
 
-    @QtCore.pyqtSlot()
-    def call(self):
-        """Call to the function.
-
-        Will only compute if none of the inputs are None, and both signals have been received.
-        """
-        if isinstance(self.sender(), BaseIO) and self.received['input_data']:
-            logging.info('%s received all signals, computing', self.title)
-            super().call()
-            for signal in self.received:
-                self.received[signal] = False
-        elif not isinstance(self.sender(), BaseIO):
-            logging.info('%s sender is not instance of BaseIO, computing', self.title)
-            super().call()
-        else:
-            missing = [signal for signal in self.received if not self.received[signal]]
-            logging.info('%s Waiting for other signal %s', self.title, missing)
-            logging.debug(self.received)
-
     def __init__(self, *args, **kwargs):
-        self.received = {'input_data': False, 'input_image': False}
-        self.input_data = Input()
-        self.input_image = Input()
-        self.input_data.changed.connect(self.set_input_data_received)
-        self.input_image.changed.connect(self.set_input_image_received)
-        self.output_image = Output()
+        self.input_data = Data()
+        self.input_image = Data()
+        self.output_image = Data()
         super().__init__(*args, *kwargs)
-
-    def set_input_data_received(self):
-        """Sets self.received['input_data'] to true"""
-        self.received['input_data'] = True
-
-    def set_input_image_received(self):
-        """Sets self.received['input_image'] to true"""
-        self.received['input_image'] = True

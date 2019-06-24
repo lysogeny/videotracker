@@ -35,7 +35,8 @@ def complex_position(contour):
     # Complex numbers are a particularily handy way of encoding position in a 2D
     # plane, as a lot of notational redundancy gets shortened quite a bit.
     # Consider using this.
-    return complex(*contour_centroid(contour))
+    if contour is not None:
+        return complex(*contour_centroid(contour))
 
 def contour_orientation(contour):
     """Computes a contour's orientation.

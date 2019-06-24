@@ -3,6 +3,7 @@
 import os
 import inspect
 import logging
+import json
 
 from PyQt5 import QtWidgets, QtCore, QtGui
 #import cv2
@@ -233,6 +234,17 @@ class MainView(QtWidgets.QMainWindow, widgets.BaseFileObject):
                                   statusTip='Loads a tracking module',
                                   triggered=self.module_pick),
             ],
+            '&Edit': [
+                QtWidgets.QAction(QtGui.QIcon.fromTheme('edit-paste'), 'Load values...',
+                                  statusTip='Loads values',
+                                  triggered=self.value_pick),
+                QtWidgets.QAction(QtGui.QIcon.fromTheme('edit-copy'), 'Save values...',
+                                  statusTip='Saves values',
+                                  triggered=self.value_save),
+                QtWidgets.QAction(QtGui.QIcon.fromTheme('edit-clear'), 'Reset values...',
+                                  statusTip='resets values',
+                                  triggered=self.value_reset),
+            ],
             '&View': [
                 QtWidgets.QAction(QtGui.QIcon.fromTheme('zoom-in'), 'Zoom in',
                                   statusTip='Increases scale',
@@ -308,6 +320,22 @@ class MainView(QtWidgets.QMainWindow, widgets.BaseFileObject):
                 if menu not in ('&Help') and not action.icon().isNull():
                     self.toolbar.addAction(action)
 
+    def value_pick(self):
+        """Loads values in the module"""
+        dialog = QtWidgets.QFileDialog.getOpenFileName(self, 'Load values', '*.json')
+        if dialog[0]:
+            with open(dialog[0], 'r') as connection:
+                self.dock.module_widget.values = json.load(connection)
+    def value_save(self):
+        """Saves values in the module"""
+        dialog = QtWidgets.QFileDialog.getSaveFileName(self, 'Save values', '*.json')
+        if dialog[0]:
+            with open(dialog[0], 'w') as connection:
+                json.dump(self.dock.module_widget.values, connection, indent=4, sort_keys=True)
+        pass
+    def value_reset(self):
+        """Resets values in the module"""
+        self.dock.module_widget.values = self.dock.initial_module_values
     def breakpoint(self):
         """This is a breakpoint"""
         #pylint: disable=no-self-use

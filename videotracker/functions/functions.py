@@ -80,7 +80,7 @@ class DrawContours(DataImageToData):
     title: str = 'Draw Contours'
     params: dict = {
         'color': params.ColorParam(),
-        'thickness': params.IntParam(minimum=1, maximum=100, label='Thickness')
+        'thickness': params.IntParam(value=3, minimum=1, maximum=100, label='Thickness')
     }
     def function(self):
         """Draws contours"""
@@ -136,12 +136,17 @@ class ExtractPolygonFeatures(DataToData):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.output_data.fields = ('x', 'y', 'area')
+        self.video = None
+        self.fields = ('x', 'y', 'area')
 
     def function(self):
         """Extract polygon features"""
+        #timestamp = self.video.time
+        #position = self.video.position
         outputs = [value for value in self.values if self.values[value]]
-        self.output_data.data = contours.extract_features(self.input_data.data,
-                                                          extra_features=outputs)
-        if self.output_data.data:
-            self.output_data.fields = self.output_data.data[0].keys()
+        data = contours.extract_features(self.input_data.data, extra_features=outputs)
+        #self.output_data.data['timestamp'] = timestamp
+        #self.output_data.data['position'] = position
+        if data is not None:
+            self.fields = data[0].keys()
+        self.output_data.data = data

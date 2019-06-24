@@ -31,7 +31,7 @@ dot_graph method to generate a dot language representation of the stack.
 
 #import json
 #import csv
-
+import time
 import logging
 import csv
 
@@ -41,6 +41,7 @@ import cv2
 
 from .video import Video
 from . import functions
+from .functions import special
 #from .functions import params
 
 class StackWidget(QtWidgets.QWidget):
@@ -85,7 +86,7 @@ class StackWidget(QtWidgets.QWidget):
     @values.setter
     def values(self, value: dict):
         for key in value:
-            self.widgets[key].values = value
+            self.widgets[key].values = value[key]
 
     def set_values(self, value: dict):
         """Set value attribute of this object"""
@@ -138,6 +139,7 @@ class BaseStack(QtCore.QThread):
     # These describe the Stack.
     methods = {}
     method_graph = {}
+    method_order = []
 
     def __init__(self, *args, in_file=None, csv_file=None, vid_file=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -153,6 +155,7 @@ class BaseStack(QtCore.QThread):
         self.csv_writer = None
         self.csv_connection = None
         self.video_output = None
+        self.stopping = False
         self.create_methods()
         self.connect_methods()
         self._inputs = {
@@ -195,36 +198,47 @@ class BaseStack(QtCore.QThread):
         """Connects the methods for this function stack"""
         for end, start in self.construct_graph():
             print(f'{start} → {end}')
-            # Special names: IMAGE, DATA, INPUT
-            if end == 'output_image':
-                # Output image is mapped to this guy's output
-                logging.info('Special `%s` from `%s` mapped to `%s`', end, start, self)
-                self.output_image = self.methods[start].output_image
-            elif end == 'output_data':
-                logging.info('Special `%s` from `%s` mapped to `%s`', end, start, self)
-                self.output_data = self.methods[start].output_data
-            elif start == 'input_image':
-                # Input image is mapped to this guy's input
-                logging.info('Special `%s` from `%s` mapped to `%s`', end, start, self)
-                self.input_image = self.methods[end].input_image
-            elif start == 'input_data':
-                logging.info('Special `%s` from `%s` mapped to `%s`', end, start, self)
-                self.input_data = self.methods[end].input_data
-            else:
-                # Other edges are mapped between edges
-                start_set = {method.split('_')[-1] for method in self.methods[start].outputs.keys()}
-                end_set = {method.split('_')[-1] for method in self.methods[end].inputs.keys()}
-                ## What to connect
-                conn_type = start_set.intersection(end_set)
-                logging.info('There are %i connections possible.', len(conn_type))
-                for connection in conn_type:
-                    connection_start = getattr(self.methods[start], f'output_{connection}')
-                    connection_end = getattr(self.methods[end], f'input_{connection}')
-                    connection_end.source = connection_start
-                    logging.info('Internal `%s` from `%s` mapped to `%s`',
-                                 connection, self.methods[start], self.methods[end])
-            if end.startswith('output'):
-                getattr(self.methods[start], end).changed.connect(self.output_changed.emit)
+            start_set = {method.split('_')[-1] for method in self.methods[start].outputs.keys()}
+            end_set = {method.split('_')[-1] for method in self.methods[end].inputs.keys()}
+            conn_type = start_set.intersection(end_set)
+            logging.info('There are %i connections possible.', len(conn_type))
+            for connection in conn_type:
+                # Make it something. None will not work, as that is a
+                # nullpointer.
+                data = getattr(self.methods[end], f'input_{connection}')
+                setattr(self.methods[start], f'output_{connection}', data)
+        #for end, start in self.construct_graph():
+        #    print(f'{start} → {end}')
+        #    # Special names: IMAGE, DATA, INPUT
+        #    if end == 'output_image':
+        #        # Output image is mapped to this guy's output
+        #        logging.info('Special `%s` from `%s` mapped to `%s`', end, start, self)
+        #        self.output_image = self.methods[start].output_image
+        #    elif end == 'output_data':
+        #        logging.info('Special `%s` from `%s` mapped to `%s`', end, start, self)
+        #        self.output_data = self.methods[start].output_data
+        #    elif start == 'input_image':
+        #        # Input image is mapped to this guy's input
+        #        logging.info('Special `%s` from `%s` mapped to `%s`', end, start, self)
+        #        self.input_image = self.methods[end].input_image
+        #    elif start == 'input_data':
+        #        logging.info('Special `%s` from `%s` mapped to `%s`', end, start, self)
+        #        self.input_data = self.methods[end].input_data
+        #    else:
+        #        # Other edges are mapped between edges
+        #        start_set = {method.split('_')[-1] for method in self.methods[start].outputs.keys()}
+        #        end_set = {method.split('_')[-1] for method in self.methods[end].inputs.keys()}
+        #        ## What to connect
+        #        conn_type = start_set.intersection(end_set)
+        #        logging.info('There are %i connections possible.', len(conn_type))
+        #        for connection in conn_type:
+        #            connection_start = getattr(self.methods[start], f'output_{connection}')
+        #            connection_end = getattr(self.methods[end], f'input_{connection}')
+        #            connection_end.source = connection_start
+        #            logging.info('Internal `%s` from `%s` mapped to `%s`',
+        #                         connection, self.methods[start], self.methods[end])
+        #    if end.startswith('output'):
+        #        getattr(self.methods[start], end).changed.connect(self.output_changed.emit)
 
     def dot_graph(self, file_name):
         """Returns a dot language representation of the stack"""
@@ -252,10 +266,12 @@ class BaseStack(QtCore.QThread):
         """Construct a StackWidget widget"""
         widgets = {
             method: self.methods[method].widget() for method in self.methods
+            if not isinstance(self.methods[method], special.SpecialBaseFunction)
         }
         widget = StackWidget(widgets)
         widget.view_changed.connect(self.set_view)
         self.values = widget.values
+        widget.valueChanged.connect(self.call)
         return widget
 
     def set_view(self, name: str):
@@ -288,12 +304,13 @@ class BaseStack(QtCore.QThread):
     @property
     def pos(self) -> int:
         """Position in the video file"""
-        return self.video.position
+        if self.video is not None:
+            return self.video.position
+        return None
     @pos.setter
     def pos(self, value: int):
-        if value != self.pos:
-            self.video.position = value
-            self.fetch_image()
+        if value != self.pos and self.video is not None:
+            self.input_image.data = self.video.grab()
 
     @property
     def running(self) -> bool:
@@ -309,6 +326,7 @@ class BaseStack(QtCore.QThread):
                 self.create_csv_writer()
             if self.vid_file is not None:
                 self.create_vid_writer()
+            self.video.reset()
             self.next()
         else:
             self.output_image.changed.disconnect(self.segment)
@@ -327,6 +345,7 @@ class BaseStack(QtCore.QThread):
         """Removes the csv writer"""
         if self.csv_file is not None:
             self.output_data.changed.disconnect(self.write_csv)
+            time.sleep(0.1)
             self.csv_connection.close()
             logging.debug('CSV output destroyed')
 
@@ -355,8 +374,9 @@ class BaseStack(QtCore.QThread):
     def destroy_vid_writer(self):
         """Closes the video writer"""
         if self.vid_file:
-            self.video_output.release()
             self.output_image.changed.disconnect(self.write_vid)
+            time.sleep(0.1)
+            self.video_output.release()
             logging.debug('Video output destroyed')
 
     def segment(self):
@@ -366,7 +386,7 @@ class BaseStack(QtCore.QThread):
             self.next()
         except StopIteration:
             self.complete.emit()
-            self.in_file = self.in_file
+            self.video.reset()
             # Seems effectless, but isn't.
             # Actually resets the video device
 
@@ -381,10 +401,6 @@ class BaseStack(QtCore.QThread):
         self.input_image.data = next(self.video)
         self.pos_changed.emit(self.pos)
 
-    def fetch_image(self):
-        """Fetches current frame from video object"""
-        self.input_image.data = self.video.frame
-
     @property
     def outputs(self):
         """Output of all variables here"""
@@ -394,17 +410,31 @@ class BaseStack(QtCore.QThread):
     def values(self) -> dict:
         """Values provided by subservient functions"""
         return {
-            function: self.methods[function].values
-            for function in self.methods
+            method: self.methods[method].values
+            for method in self.methods
         }
     @values.setter
     def values(self, value: dict):
-        for method in self.methods:
+        for method in value:
             self.methods[method].values = value[method]
 
     def set_values(self, value: dict):
         """Sets values attribute"""
         self.values = value
+
+    def call(self):
+        """Runs through the stack
+
+        Uses self.method_order to figure out the order in which to call methods
+        """
+        self.stopping = False
+        for method in self.method_order:
+            if not self.stopping:
+                time.sleep(0.01)
+                self.methods[method].call()
+
+    def stop(self):
+        self.stopping = True
 
     def run(self):
         """Runs this thread"""
@@ -435,6 +465,8 @@ class ThresholdStack(BaseStack):
     """A function stack for adaptive thresholds"""
     # List of functions that this class has
     methods = {
+        'image_output': functions.special.OutputImage,
+        'data_output': functions.special.OutputCSV,
         'bgr2gray': functions.BGR2Gray,
         'gaussian_blur': functions.GaussianBlur,
         'adaptive_threshold': functions.AdaptiveThreshold,
@@ -442,7 +474,8 @@ class ThresholdStack(BaseStack):
         'contour_extract': functions.Contours,
         'size_filter': functions.SizeFilter,
         'draw_contours': functions.DrawContours,
-        'feature_extraction': functions.ExtractPolygonFeatures
+        'feature_extraction': functions.ExtractPolygonFeatures,
+        'image_input': functions.special.InputImage,
     }
     # Description of the dependency tree.
     # Disappointingly, this actually needs to be a graph, because otherwise we
@@ -450,8 +483,8 @@ class ThresholdStack(BaseStack):
     # method_graph describes how the signal's and slots from the different
     # functions are connected.
     method_graph = {
-        'output_image': 'draw_contours',
-        'output_data': 'feature_extraction',
+        'image_output': 'draw_contours',
+        'data_output': 'feature_extraction',
         'feature_extraction': 'size_filter',
         'draw_contours': ('bgr2gray', 'size_filter'),
         'size_filter': 'contour_extract',
@@ -459,8 +492,24 @@ class ThresholdStack(BaseStack):
         'morphology': 'adaptive_threshold',
         'adaptive_threshold': 'gaussian_blur',
         'gaussian_blur': 'bgr2gray',
-        'bgr2gray': 'input_image',
+        'bgr2gray': 'image_input',
     }
+    # Method order can likely be inferred from the graph above.
+    # For now, I shall just manually define the order in which things need to be
+    # run
+    method_order = [
+        'image_input',
+        'bgr2gray',
+        'gaussian_blur',
+        'adaptive_threshold',
+        'morphology',
+        'contour_extract',
+        'size_filter',
+        'draw_contours',
+        'feature_extraction',
+        'image_output',
+        'data_output',
+    ]
 
 class SimpleThresholdStack(BaseStack):
     """Threshold stack, simplified
