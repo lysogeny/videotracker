@@ -270,7 +270,7 @@ class MainView(QtWidgets.QMainWindow, widgets.BaseFileObject):
                                   'Start segmentation',
                                   statusTip='Segmentation is started',
                                   shortcut='Space', enabled=False,
-                                  triggered=lambda: setattr(self, 'running', not self.running)),
+                                  triggered=self.startstop),
                 QtWidgets.QAction(QtGui.QIcon.fromTheme('go-first'), 'Goto first frame',
                                   statusTip='Goes to the first frame',
                                   triggered=lambda: setattr(self.image, 'pos', 0),
@@ -386,7 +386,6 @@ class MainView(QtWidgets.QMainWindow, widgets.BaseFileObject):
         self.options.moveToThread(self.options_thread)
         self.dock.module = self.options
         self.image.source = self.options
-        self.options.start()
         self.options_thread.start()
         self.options.complete.connect(lambda: setattr(self, 'running', False))
         self.options.view_changed.connect(self.image.get)
@@ -399,3 +398,11 @@ class MainView(QtWidgets.QMainWindow, widgets.BaseFileObject):
             save_file = QtWidgets.QFileDialog.getSaveFileName(self, 'Save DOT Graph')
             if save_file[0]:
                 self.options.dot_graph(save_file[0])
+
+    def startstop(self):
+        """Starts/stops the segmentation"""
+        self.running = not self.running
+        if self.running:
+            self.options.start()
+        else:
+            self.options.stop()

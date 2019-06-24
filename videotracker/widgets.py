@@ -521,12 +521,10 @@ class SideDock(QDockWidget, BaseFileObject):
     @property
     def in_file(self) -> str:
         """Input file"""
-        return self.files['in']
+        return self.module.in_file
     @in_file.setter
     def in_file(self, value: str):
-        self.files['in'] = value
-        if self.module is not None:
-            self.module.in_file = value
+        self.module.in_file = value
 
     @property
     def preview(self):

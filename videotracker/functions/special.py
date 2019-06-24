@@ -107,6 +107,10 @@ class InputImage(InputFunction):
         self.values['frame'] = value
 
     def set_frame(self, value):
+        """Sets the frame attribute
+
+        Causes a call to the call method.
+        """
         self.frame = value
         self.call()
 
@@ -138,6 +142,7 @@ class InputImage(InputFunction):
             self.function()
         else:
             logging.debug('%s does computation as no reason exists not to', self.title)
+            self.function()
 
     def setup(self):
         """Sets the input image function up"""

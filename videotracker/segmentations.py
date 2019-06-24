@@ -42,7 +42,7 @@ import cv2
 from .video import Video
 from . import functions
 from .functions import special
-#from .functions import params
+from .functions import abc
 
 class StackWidget(QtWidgets.QWidget):
     """A widget that represents a stack"""
@@ -295,16 +295,20 @@ class BaseStack(QtCore.QThread):
         return self.image_input.file_name
     @in_file.setter
     def in_file(self, value: str):
-        self.image_input.reset()
-        self.image_input.file_name = value
+        if value is not None:
+            self.image_input.reset()
+            self.image_input.file_name = value
+        self.call()
 
     @property
     def pos(self) -> int:
         """Position in the video file"""
-        return self.image_input.values['frame']
+        return self.image_input.frame
     @pos.setter
     def pos(self, value: int):
-        self.image_input.values['frame'] = value
+        if value is not None:
+            self.image_input.frame = value
+            self.call()
     @QtCore.pyqtSlot(int)
     def set_pos(self, index: int):
         """Sets position of video to index"""
@@ -317,6 +321,10 @@ class BaseStack(QtCore.QThread):
     @running.setter
     def running(self, value: bool):
         self._running = value
+        if value:
+            pass
+        else:
+            self.stop()
 
     @property
     def values(self) -> dict:
@@ -339,7 +347,6 @@ class BaseStack(QtCore.QThread):
 
         Uses self.method_order to figure out the order in which to call methods
         """
-        self.stopping = False
         for method in self.method_order:
             if not self.stopping:
                 self.methods[method].call()
@@ -349,30 +356,32 @@ class BaseStack(QtCore.QThread):
         """Sets the stopping value, indicating that the thread should be stopped"""
         self.stopping = True
 
+    def progress(self):
+        """Returns a float ranging from 0-1 indicating progress"""
+        meta = self.image_input.output_meta.data
+        return meta['frame'] / meta['max_frames']
+
     def run(self):
         """Runs this thread"""
         logging.info('%s Started', type(self).__name__)
-        self.exec_()
+        self.image_input.reset()
+        meta = self.image_input.output_meta.data
+        frame = meta['frame']
+        max_frame = meta['max_frames']
+        self.stopping = False
+        while frame <= max_frame and not self.stopping:
+            logging.debug('Currently running frame %05i/%05i', frame, max_frame)
+            self.pos_changed.emit(frame)
+            meta = self.image_input.output_meta.data
+            frame = meta['frame']
+            max_frame = meta['max_frames']
+            self.pos += 1
+            self.call()
+            if self.stopping:
+                break
+        if self.stopping:
+            logging.debug('Stopped by value')
         logging.info('%s Finished', type(self).__name__)
-
-class ShortStack(BaseStack):
-    """A short stack that does not output data, but only images"""
-    methods = {
-        #'input_image': functions.special.InputImage,
-        'gaussian_blur': functions.GaussianBlur,
-        'adaptive_threshold': functions.AdaptiveThreshold,
-        'morphology': functions.Morphology,
-        'bgr2gray': functions.BGR2Gray,
-        #'output_image': functions.special.OutputImage,
-        #'output_data': functions.special.OutputData,
-    }
-    method_graph = {
-        'output_image': 'morphology',
-        'morphology': 'adaptive_threshold',
-        'adaptive_threshold': 'gaussian_blur',
-        'gaussian_blur': 'bgr2gray',
-        'bgr2gray': 'input_image',
-    }
 
 class ThresholdStack(BaseStack):
     """A function stack for adaptive thresholds"""
