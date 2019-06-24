@@ -360,8 +360,11 @@ class ImageView(QWidget):
 
     def get(self):
         """Gets new data"""
-        self.image = self.source.view.data
-        logging.debug('Data copied to ImageView')
+        if self.source.view.data is None:
+            logging.debug('No image data copied as image data is None')
+        else:
+            self.image = self.source.view.data
+            logging.debug('Data copied to ImageView')
 
     def __init__(self):
         super().__init__()

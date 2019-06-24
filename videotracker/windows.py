@@ -85,7 +85,7 @@ class MainView(QtWidgets.QMainWindow, widgets.BaseFileObject):
     # main window, that is impressively low.
     # pylint: disable=too-many-instance-attributes
 
-    TITLE = 'pyqt-videotracker'
+    TITLE = 'videotracker'
     actions = {}
     def __init__(self, csv_file=None, vid_file=None, in_file=None, config=None, debug=False):
         super().__init__()

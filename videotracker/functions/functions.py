@@ -1,9 +1,11 @@
 """Functions that can be used to assemble segmentations"""
 
+import logging
+
 import cv2
 
 from . import params
-from .abc import ImageToImage, DataToData, ImageToData, Output, Input, DataImageToData
+from .abc import ImageToImage, DataToData, ImageToData, DataImageToData, Data
 from .. import helpers
 from .. import contours
 
@@ -135,18 +137,26 @@ class ExtractPolygonFeatures(DataToData):
     hidden: bool = False
 
     def __init__(self, *args, **kwargs):
+        self.input_meta = Data()
+        self.output_fields = Data()
         super().__init__(*args, **kwargs)
         self.video = None
-        self.fields = ('x', 'y', 'area')
+        self.output_fields.data = ('frame', 'timestamp', 'x', 'y')
 
     def function(self):
         """Extract polygon features"""
         #timestamp = self.video.time
         #position = self.video.position
+        timestamp = self.input_meta.data['timestamp']
+        frame = self.input_meta.data['frame']
+        logging.debug(self.input_meta.data)
         outputs = [value for value in self.values if self.values[value]]
         data = contours.extract_features(self.input_data.data, extra_features=outputs)
+        for entry in data:
+            entry['frame'] = frame
+            entry['timestamp'] = timestamp
         #self.output_data.data['timestamp'] = timestamp
         #self.output_data.data['position'] = position
         if data is not None:
-            self.fields = data[0].keys()
+            self.output_fields.data = data[0].keys()
         self.output_data.data = data

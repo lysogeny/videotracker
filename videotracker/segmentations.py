@@ -145,19 +145,13 @@ class BaseStack(QtCore.QThread):
         super().__init__(*args, **kwargs)
         # These two are no longer properties, as they don't need anything to
         # happen on setting or loading.
-        self.video = None
-        self.files = {'in': in_file, 'csv': csv_file, 'vid': vid_file}
-        self.csv_file = csv_file
-        self.vid_file = vid_file
         self._running = False
         self._enabled = False
         self._view = None
-        self.csv_writer = None
-        self.csv_connection = None
-        self.video_output = None
         self.stopping = False
         self.create_methods()
         self.connect_methods()
+        self.connect_special()
         self._inputs = {
             fun: self.methods[fun].inputs for fun in self.methods
         }
@@ -169,10 +163,9 @@ class BaseStack(QtCore.QThread):
             if 'output_image' in self._outputs[output]
         }
         self.view = self.output_views['morphology']
-        if in_file is None:
-            self._in_file = None
-        else:
-            self.in_file = in_file
+        self.in_file = in_file
+        self.csv_file = csv_file
+        self.vid_file = vid_file
 
     def create_methods(self):
         """Constructs methods for this method"""
@@ -205,40 +198,48 @@ class BaseStack(QtCore.QThread):
             for connection in conn_type:
                 # Make it something. None will not work, as that is a
                 # nullpointer.
-                data = getattr(self.methods[end], f'input_{connection}')
-                setattr(self.methods[start], f'output_{connection}', data)
-        #for end, start in self.construct_graph():
-        #    print(f'{start} → {end}')
-        #    # Special names: IMAGE, DATA, INPUT
-        #    if end == 'output_image':
-        #        # Output image is mapped to this guy's output
-        #        logging.info('Special `%s` from `%s` mapped to `%s`', end, start, self)
-        #        self.output_image = self.methods[start].output_image
-        #    elif end == 'output_data':
-        #        logging.info('Special `%s` from `%s` mapped to `%s`', end, start, self)
-        #        self.output_data = self.methods[start].output_data
-        #    elif start == 'input_image':
-        #        # Input image is mapped to this guy's input
-        #        logging.info('Special `%s` from `%s` mapped to `%s`', end, start, self)
-        #        self.input_image = self.methods[end].input_image
-        #    elif start == 'input_data':
-        #        logging.info('Special `%s` from `%s` mapped to `%s`', end, start, self)
-        #        self.input_data = self.methods[end].input_data
-        #    else:
-        #        # Other edges are mapped between edges
-        #        start_set = {method.split('_')[-1] for method in self.methods[start].outputs.keys()}
-        #        end_set = {method.split('_')[-1] for method in self.methods[end].inputs.keys()}
-        #        ## What to connect
-        #        conn_type = start_set.intersection(end_set)
-        #        logging.info('There are %i connections possible.', len(conn_type))
-        #        for connection in conn_type:
-        #            connection_start = getattr(self.methods[start], f'output_{connection}')
-        #            connection_end = getattr(self.methods[end], f'input_{connection}')
-        #            connection_end.source = connection_start
-        #            logging.info('Internal `%s` from `%s` mapped to `%s`',
-        #                         connection, self.methods[start], self.methods[end])
-        #    if end.startswith('output'):
-        #        getattr(self.methods[start], end).changed.connect(self.output_changed.emit)
+                # Starts are more important than ends.
+                data = getattr(self.methods[start], f'output_{connection}')
+                setattr(self.methods[end], f'input_{connection}', data)
+
+    def connect_special(self):
+        """Find special nodes"""
+        special_nodes = [
+            self.methods[method] for method in self.methods
+            if isinstance(self.methods[method], functions.special.SpecialBaseFunction)
+        ]
+        inputs = [
+            method for method in special_nodes
+            if isinstance(method, functions.special.InputFunction)
+        ]
+        outputs = [
+            method for method in special_nodes
+            if isinstance(method, functions.special.OutputFunction)
+        ]
+        image_inputs = [
+            method for method in inputs
+            if isinstance(method, functions.special.InputImage)
+        ]
+        image_outputs = [
+            method for method in outputs
+            if isinstance(method, functions.special.OutputImage)
+        ]
+        csv_outputs = [
+            method for method in outputs
+            if isinstance(method, functions.special.OutputCSV)
+        ]
+        if len(image_inputs) > 1:
+            raise NotImplementedError('Multi image inputs are currently not implemented')
+        if len(image_outputs) > 1:
+            raise NotImplementedError('Multi image outputs are currently not implemented')
+        if len(csv_outputs) > 1:
+            raise NotImplementedError('Multi CSV outputs are currently not implemented')
+        if image_inputs:
+            self.image_input = image_inputs[0]
+        if image_outputs:
+            self.image_output = image_outputs[0]
+        if csv_outputs:
+            self.csv_output = csv_outputs[0]
 
     def dot_graph(self, file_name):
         """Returns a dot language representation of the stack"""
@@ -291,26 +292,23 @@ class BaseStack(QtCore.QThread):
     @property
     def in_file(self) -> str:
         """The input file"""
-        return self.files['in']
+        return self.image_input.file_name
     @in_file.setter
     def in_file(self, value: str):
-        self.files['in'] = value
-        if value is not None:
-            self.video = Video(value)
-            self.input_image.data = self.video.frame
-        # This might cause problems, depending on what the behaviour of the
-        # video object was.
+        self.image_input.reset()
+        self.image_input.file_name = value
 
     @property
     def pos(self) -> int:
         """Position in the video file"""
-        if self.video is not None:
-            return self.video.position
-        return None
+        return self.image_input.values['frame']
     @pos.setter
     def pos(self, value: int):
-        if value != self.pos and self.video is not None:
-            self.input_image.data = self.video.grab()
+        self.image_input.values['frame'] = value
+    @QtCore.pyqtSlot(int)
+    def set_pos(self, index: int):
+        """Sets position of video to index"""
+        self.pos = index
 
     @property
     def running(self) -> bool:
@@ -319,92 +317,6 @@ class BaseStack(QtCore.QThread):
     @running.setter
     def running(self, value: bool):
         self._running = value
-        if value:
-            self.in_file = self.in_file
-            self.output_image.changed.connect(self.segment)
-            if self.csv_file is not None:
-                self.create_csv_writer()
-            if self.vid_file is not None:
-                self.create_vid_writer()
-            self.video.reset()
-            self.next()
-        else:
-            self.output_image.changed.disconnect(self.segment)
-            self.destroy_csv_writer()
-            self.destroy_vid_writer()
-
-    def create_csv_writer(self):
-        """Opens the file at csv_file and starts a dictwriter. Connects output_data"""
-        self.csv_connection = open(self.csv_file, 'w')
-        self.csv_writer = csv.DictWriter(self.csv_connection, fieldnames=self.output_data.fields)
-        self.csv_writer.writeheader()
-        self.output_data.changed.connect(self.write_csv)
-        logging.debug('Created CSV writer %s at %s', self.csv_writer, self.csv_connection)
-
-    def destroy_csv_writer(self):
-        """Removes the csv writer"""
-        if self.csv_file is not None:
-            self.output_data.changed.disconnect(self.write_csv)
-            time.sleep(0.1)
-            self.csv_connection.close()
-            logging.debug('CSV output destroyed')
-
-    def write_csv(self):
-        """Writes current output_data row to the csv file"""
-        for row in self.output_data.data:
-            self.csv_writer.writerow(row)
-            logging.debug('Wrote to csv: %s', row)
-
-    def create_vid_writer(self):
-        """Opens the ifle at vid_file and starts a video thing"""
-        self.video_output = cv2.VideoWriter(self.vid_file,
-                                            cv2.VideoWriter_fourcc(*self.video.fourcc),
-                                            self.video.framerate, self.video.resolution)
-        logging.debug('Created video writer %s at %s', self.video_output, self.vid_file)
-        self.output_image.changed.connect(self.write_vid)
-
-    def write_vid(self):
-        """Writes the current output_image to the video file
-
-        Todo: Make videos a separate function
-        """
-        self.video_output.write(self.output_image.data)
-        logging.debug('Wrote video frame')
-
-    def destroy_vid_writer(self):
-        """Closes the video writer"""
-        if self.vid_file:
-            self.output_image.changed.disconnect(self.write_vid)
-            time.sleep(0.1)
-            self.video_output.release()
-            logging.debug('Video output destroyed')
-
-    def segment(self):
-        """Segments. If StopIteration is encountered, stops"""
-        logging.debug('Load frame %i', self.video.position)
-        try:
-            self.next()
-        except StopIteration:
-            self.complete.emit()
-            self.video.reset()
-            # Seems effectless, but isn't.
-            # Actually resets the video device
-
-    @QtCore.pyqtSlot(int)
-    def set_pos(self, index: int):
-        """Sets position of video to index"""
-        print(self.sender())
-        self.pos = index
-
-    def next(self):
-        """Loads next image from video device"""
-        self.input_image.data = next(self.video)
-        self.pos_changed.emit(self.pos)
-
-    @property
-    def outputs(self):
-        """Output of all variables here"""
-        return {output: self._outputs[output].data for output in self._outputs}
 
     @property
     def values(self) -> dict:
@@ -430,10 +342,11 @@ class BaseStack(QtCore.QThread):
         self.stopping = False
         for method in self.method_order:
             if not self.stopping:
-                time.sleep(0.01)
                 self.methods[method].call()
+        self.output_changed.emit()
 
     def stop(self):
+        """Sets the stopping value, indicating that the thread should be stopped"""
         self.stopping = True
 
     def run(self):
@@ -485,7 +398,7 @@ class ThresholdStack(BaseStack):
     method_graph = {
         'image_output': 'draw_contours',
         'data_output': 'feature_extraction',
-        'feature_extraction': 'size_filter',
+        'feature_extraction': ('size_filter', 'image_input'),
         'draw_contours': ('bgr2gray', 'size_filter'),
         'size_filter': 'contour_extract',
         'contour_extract': 'morphology',
