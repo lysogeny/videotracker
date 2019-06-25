@@ -291,11 +291,6 @@ class MainView(QtWidgets.QMainWindow, widgets.BaseFileObject):
                                   triggered=lambda: setattr(self.image, 'pos', self.image.pos_max),
                                   shortcut=']',
                                   enabled=False),
-                QtWidgets.QAction('Show toolbar',
-                                  checkable=True,
-                                  checked=True,
-                                  statusTip='Visibility of the toolbar',
-                                  triggered=self.toolbar.setVisible)
             ],
             '&Help': [
                 QtWidgets.QAction(QtGui.QIcon.fromTheme('help-about'), 'About Qt',
@@ -317,7 +312,7 @@ class MainView(QtWidgets.QMainWindow, widgets.BaseFileObject):
                 this_menu.addAction(action)
                 # Only add actions where I added an icon and which aren't in
                 # the help menu.
-                if menu not in ('&Help') and not action.icon().isNull():
+                if menu not in ('&Help'):
                     self.toolbar.addAction(action)
 
     def value_pick(self):
