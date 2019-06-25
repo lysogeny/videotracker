@@ -79,8 +79,7 @@ Linux.
 Mac OS
 ------
 
-Unfortunately, I do not know how to setup a development environment under Mac
-OS. The steps are likely similar to those for Linux, or Windows.
+The steps for Mac OS are the same as for Windows and Linux.
 
 Verify working libraries 
 ------------------------

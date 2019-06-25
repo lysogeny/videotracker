@@ -17,6 +17,9 @@ directory to create a pacman package.
 
 To create an executable file, use pyinstaller.
 
+To create a package for your GNU/Linux distro, please consult that distro's
+packaging manual.
+
 Windows
 -------
 
@@ -52,4 +55,10 @@ It is also further to create a installer bundle for windows using inno setup. A
 Mac OS
 ------
 
-`pyinstaller` will likely work, although is at the moment untested (try the windows `.spec` file, maybe that works).
+To create a mac os `.app` file, call pyinstaller in the osx build directory like this:
+
+    pyinstaller gui.py -w
+
+This should by default pull in all of the required shared objects, and create a `.app` file in the `dist/` directory.
+
+
