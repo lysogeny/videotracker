@@ -139,7 +139,7 @@ class BaseStack(QtCore.QThread):
     # These describe the Stack.
     methods = {}
     method_graph = {}
-    method_order = []
+    manual_method_order = []
 
     def __init__(self, *args, in_file=None, csv_file=None, vid_file=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -187,20 +187,52 @@ class BaseStack(QtCore.QThread):
             else:
                 yield (end, starts)
 
+    @property
+    def method_order(self):
+        """Order in which methods should be evaluated"""
+        if self.manual_method_order:
+            # The manual_method_order is non-empty.
+            # We will use the manual_method_order
+            return self.manual_method_order
+        # No method order has been defined, we will provide a topological
+        # sorting.
+        return self.kahn_order()
+
+    def kahn_order(self):
+        """Returns a topological sorting of the method graph.
+
+        Uses Kahn's algorithm
+        """
+        order = [None] * len(self.methods)
+        # Find nodes with no incoming edges
+        # while there are a some left
+        #
+
     def connect_methods(self):
         """Connects the methods for this function stack"""
         for end, start in self.construct_graph():
-            print(f'{start} → {end}')
+            logging.debug(f'{start} → {end}')
+            startsplit = start.split(':')
+            start = startsplit[0]
+            if len(startsplit) > 1:
+                consider = startsplit[-1]
+            else:
+                consider = None
             start_set = {method.split('_')[-1] for method in self.methods[start].outputs.keys()}
             end_set = {method.split('_')[-1] for method in self.methods[end].inputs.keys()}
+            if consider is not None:
+                start_set = start_set.intersection(set([consider]))
             conn_type = start_set.intersection(end_set)
-            logging.info('There are %i connections possible.', len(conn_type))
+            logging.debug('There are %i connections possible.', len(conn_type))
             for connection in conn_type:
                 # Make it something. None will not work, as that is a
                 # nullpointer.
                 # Starts are more important than ends.
                 data = getattr(self.methods[start], f'output_{connection}')
                 setattr(self.methods[end], f'input_{connection}', data)
+                logging.info('Connected %s.output_%s to %s.input_%s',
+                             type(self.methods[start]).__name__, connection,
+                             type(self.methods[end]).__name__, connection)
 
     def connect_special(self):
         """Find special nodes"""
@@ -249,18 +281,20 @@ class BaseStack(QtCore.QThread):
             method = self.methods[node]
             graph.node(node, f'{method.title}')
         for end, start in self.construct_graph():
-            if end.startswith('output'):
-                graph.node(end)
-                data_type = end.split('_')[-1]
-            if start.startswith('input'):
-                graph.node(start)
-                data_type = start.split('_')[-1]
-            if not start.startswith('input') and not end.startswith('output'):
-                start_set = {method.split('_')[-1] for method in self.methods[start].outputs.keys()}
-                end_set = {method.split('_')[-1] for method in self.methods[end].inputs.keys()}
-                data_type = list(start_set.intersection(end_set))[0]
-            logging.debug('%s → %s (%s)', start, end, data_type)
-            graph.edge(start, end, label=data_type)
+            startsplit = start.split(':')
+            start = startsplit[0]
+            if len(startsplit) > 1:
+                consider = startsplit[-1]
+            else:
+                consider = None
+            start_set = {method.split('_')[-1] for method in self.methods[start].outputs.keys()}
+            end_set = {method.split('_')[-1] for method in self.methods[end].inputs.keys()}
+            if consider is not None:
+                start_set = start_set.intersection(set([consider]))
+            connections = start_set.intersection(end_set)
+            for data_type in connections:
+                logging.debug('%s → %s (%s)', start, end, data_type)
+                graph.edge(start, end, label=data_type)
         return graph.render(file_name)
 
     def widget(self):
@@ -301,6 +335,22 @@ class BaseStack(QtCore.QThread):
         self.call()
 
     @property
+    def csv_file(self) -> str:
+        """The csv output file"""
+        return self.csv_output.file_name
+    @csv_file.setter
+    def csv_file(self, value: str):
+        self.csv_output.file_name = value
+
+    @property
+    def vid_file(self) -> str:
+        """The video output file"""
+        return self.image_output.file_name
+    @vid_file.setter
+    def vid_file(self, value: str):
+        self.image_output.file_name = value
+
+    @property
     def pos(self) -> int:
         """Position in the video file"""
         return self.image_input.frame
@@ -309,7 +359,6 @@ class BaseStack(QtCore.QThread):
         if value is not None:
             self.image_input.frame = value
             self.call()
-    @QtCore.pyqtSlot(int)
     def set_pos(self, index: int):
         """Sets position of video to index"""
         self.pos = index
@@ -365,12 +414,16 @@ class BaseStack(QtCore.QThread):
         """Runs this thread"""
         logging.info('%s Started', type(self).__name__)
         self.image_input.reset()
+        if self.csv_file is not None:
+            self.csv_output.enable()
+        if self.vid_file is not None:
+            self.image_output.enable()
         meta = self.image_input.output_meta.data
         frame = meta['frame']
         max_frame = meta['max_frames']
         self.stopping = False
         while frame <= max_frame and not self.stopping:
-            logging.debug('Currently running frame %05i/%05i', frame, max_frame)
+            logging.info('Progress: [%04i/%04i]', frame, max_frame)
             self.pos_changed.emit(frame)
             meta = self.image_input.output_meta.data
             frame = meta['frame']
@@ -379,6 +432,10 @@ class BaseStack(QtCore.QThread):
             self.call()
             if self.stopping:
                 break
+        if self.csv_file is not None:
+            self.csv_output.disable()
+        if self.vid_file is not None:
+            self.image_output.disable()
         if self.stopping:
             logging.debug('Stopped by value')
         logging.info('%s Finished', type(self).__name__)
@@ -405,7 +462,7 @@ class ThresholdStack(BaseStack):
     # method_graph describes how the signal's and slots from the different
     # functions are connected.
     method_graph = {
-        'image_output': 'draw_contours',
+        'image_output': ('draw_contours', 'image_input:meta'),
         'data_output': 'feature_extraction',
         'feature_extraction': ('size_filter', 'image_input'),
         'draw_contours': ('bgr2gray', 'size_filter'),
@@ -419,7 +476,7 @@ class ThresholdStack(BaseStack):
     # Method order can likely be inferred from the graph above.
     # For now, I shall just manually define the order in which things need to be
     # run
-    method_order = [
+    manual_method_order = [
         'image_input',
         'bgr2gray',
         'gaussian_blur',

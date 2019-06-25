@@ -157,6 +157,8 @@ class ExtractPolygonFeatures(DataToData):
             entry['timestamp'] = timestamp
         #self.output_data.data['timestamp'] = timestamp
         #self.output_data.data['position'] = position
-        if data is not None:
-            self.output_fields.data = data[0].keys()
+        if data is not None and data:
+            self.output_fields.data = list(data[0].keys())
+        else:
+            self.output_fields.data = ['timestamp', 'frame', 'x', 'y'] + outputs
         self.output_data.data = data
