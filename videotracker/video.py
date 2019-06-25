@@ -7,7 +7,6 @@ A Video object abstracts the videofile.
 from typing import Tuple
 import logging
 
-from PyQt5 import QtCore
 import cv2
 
 from .functions import abc
@@ -33,7 +32,7 @@ class Video:
         self._frame = None
         self._new = True
         self.file_name = file_name
-        self.output_image = abc.Output()
+        self.output_image = abc.Data()
         if self.file_name is not None:
             self.capture = cv2.VideoCapture(self.file_name)
 
@@ -127,6 +126,8 @@ class Video:
         """
         self.position = 0
         self.stopped = False
+        self.capture.release()
+        self.capture = cv2.VideoCapture(self.file_name)
 
     def close(self):
         """Closes the file connections"""
