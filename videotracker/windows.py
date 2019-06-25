@@ -212,7 +212,7 @@ class MainView(QtWidgets.QMainWindow, widgets.BaseFileObject):
         self.statusbar.showMessage('Ready')
         # Dock
         self.dock = widgets.SideDock()
-        self.dock.started.connect(lambda x: setattr(self, 'running', x))
+        self.dock.started.connect(self.startstop)
         self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, self.dock)
         # Image
         self.image = widgets.ImageView()
