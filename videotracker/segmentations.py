@@ -145,10 +145,10 @@ class BaseStack(QtCore.QThread):
         super().__init__(*args, **kwargs)
         # These two are no longer properties, as they don't need anything to
         # happen on setting or loading.
+        self.stopping = False
         self._running = False
         self._enabled = False
         self._view = None
-        self.stopping = False
         self.create_methods()
         self.connect_methods()
         self.connect_special()
@@ -190,13 +190,11 @@ class BaseStack(QtCore.QThread):
     @property
     def method_order(self):
         """Order in which methods should be evaluated"""
-        if self.manual_method_order:
-            # The manual_method_order is non-empty.
-            # We will use the manual_method_order
-            return self.manual_method_order
-        # No method order has been defined, we will provide a topological
-        # sorting.
-        return self.kahn_order()
+        if not self.manual_method_order:
+            # No method order has been defined, we will set a topological
+            # sorting.
+            self.manual_method_order = self.kahn_order()
+        return self.manual_method_order
 
     def kahn_order(self):
         """Returns a topological sorting of the method graph.
@@ -207,6 +205,8 @@ class BaseStack(QtCore.QThread):
         # Find nodes with no incoming edges
         # while there are a some left
         #
+        return order
+        # this function's name? Speaker of the House. ORDAAAAAR.
 
     def connect_methods(self):
         """Connects the methods for this function stack"""
@@ -423,13 +423,12 @@ class BaseStack(QtCore.QThread):
         max_frame = meta['max_frames']
         self.stopping = False
         while frame <= max_frame and not self.stopping:
-            logging.info('Progress: [%04i/%04i]', frame, max_frame)
-            self.pos_changed.emit(frame)
+            self.call()
             meta = self.image_input.output_meta.data
             frame = meta['frame']
-            max_frame = meta['max_frames']
-            self.pos += 1
-            self.call()
+            self.pos_changed.emit(frame)
+            logging.info('Progress: [%04i/%04i]', frame, max_frame)
+            self.image_input.frame += 1
             if self.stopping:
                 break
         if self.csv_file is not None:
@@ -439,6 +438,7 @@ class BaseStack(QtCore.QThread):
         if self.stopping:
             logging.debug('Stopped by value')
         logging.info('%s Finished', type(self).__name__)
+        self.stopping = False
 
 class ThresholdStack(BaseStack):
     """A function stack for adaptive thresholds"""

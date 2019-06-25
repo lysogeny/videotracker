@@ -190,6 +190,7 @@ class InputImage(InputFunction):
         # next() on a video is very very fast. With some distance
         # threshold (here 16), you can get the appropriate frame using next() instead of
         # setting position and then loading.
+        last = False
         if 0 < distance < 16:
             for i in range(distance):
                 logging.debug('Getting frame %i iteration %i', self.values['frame'], i)
@@ -197,7 +198,9 @@ class InputImage(InputFunction):
                     data = next(self.video)
                 except StopIteration:
                     logging.debug('Encountered StopIteration at %i', self.video.position)
-            self.output_image.data = data
+                    last = True
+            if not last:
+                self.output_image.data = data
         else:
             self.video.position = self.values['frame']
             self.output_image.data = self.video.frame
@@ -246,7 +249,6 @@ class OutputFunction(SpecialBaseFunction):
         else:
             logging.debug('%s is disabled, not writing', self.title)
 
-
 class OutputImage(OutputFunction):
     """Outputs an image"""
     title: str = 'Output Image'
@@ -258,25 +260,30 @@ class OutputImage(OutputFunction):
         }
         self.input_meta = Data()
         self.input_image = Data()
-
-    @property
-    def file_name(self):
-        """The target file name"""
-        return self.values['file']
-    @file_name.setter
-    def file_name(self, value: str):
-        self.values['file'] = value
+        self.vid_writer = None
 
     def enable(self):
         """Enables the output"""
-        self.enabled = True
+        meta = self.input_meta.data
+        self.vid_writer = cv2.VideoWriter(
+            self.file_name,
+            cv2.VideoWriter_fourcc(*meta['fourcc']),
+            meta['framerate'],
+            meta['resolution'],
+        )
+        super().enable()
+        logging.debug('Constructed %s', self.title)
 
     def disable(self):
         """Disables the output"""
-        self.enabled = False
+        super().disable()
+        self.vid_writer.release()
+        logging.debug('Deconstructed %s', self.title)
 
     def function(self):
         """Function that creates output video into a file"""
+        conv = cv2.cvtColor(self.input_image.data, cv2.COLOR_BGR2RGB)
+        self.vid_writer.write(conv)
 
 class OutputCSV(OutputFunction):
     """Outputs csv data"""
